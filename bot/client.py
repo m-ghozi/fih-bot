@@ -8,6 +8,7 @@ from discord.ext import commands
 from .cogs.rod_commands import RodCommands
 from .cogs.wiki_commands import WikiCommands
 from .config import Settings
+from .errors import describe_command_error
 from .wiki import WikiClient
 
 log = logging.getLogger(__name__)
@@ -29,6 +30,23 @@ class FischBot(commands.Bot):
             settings.user_agent,
             base_url=settings.base_url,
         )
+        self.tree.on_error = self._on_app_command_error
+
+    async def _on_app_command_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
+        message = describe_command_error(error)
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+
+    async def on_command_error(
+        self, ctx: commands.Context, error: commands.CommandError
+    ) -> None:
+        if isinstance(error, commands.CommandNotFound):
+            return
+        await ctx.send(describe_command_error(error))
 
     async def setup_hook(self) -> None:
         await self.add_cog(WikiCommands(self))

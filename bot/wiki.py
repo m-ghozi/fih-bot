@@ -13,13 +13,17 @@ import aiohttp
 
 from .parsing import clean_extract, clean_wikitext, strip_html
 
-__all__ = ["WikiClient", "WikiError", "SearchResult", "PageInfo"]
+__all__ = ["WikiClient", "WikiError", "PageNotFoundError", "SearchResult", "PageInfo"]
 
 _CACHE_LIMIT = 512
 
 
 class WikiError(Exception):
     """Raised when communication with the wiki fails."""
+
+
+class PageNotFoundError(WikiError):
+    """Raised when the requested page does not exist."""
 
 
 @dataclass(frozen=True)
@@ -120,7 +124,10 @@ class WikiClient:
         if not isinstance(data, dict):
             raise WikiError("The wiki returned an invalid response.")
         if "error" in data:
-            info = data["error"].get("info") or data["error"].get("code") or "unknown error"
+            code = data["error"].get("code") or ""
+            info = data["error"].get("info") or code or "unknown error"
+            if code in {"missingtitle", "nosuchpageid"}:
+                raise PageNotFoundError(f"Page not found: {info}")
             raise WikiError(f"Wiki API: {info}")
 
         self._cache_set(key, data)
@@ -172,7 +179,7 @@ class WikiClient:
         )
         pages = data.get("query", {}).get("pages", []) or []
         if not pages:
-            raise WikiError(f"Page '{title}' was not found.")
+            raise PageNotFoundError(f"Page '{title}' was not found.")
         page = pages[0]
         resolved_title = page.get("title", title)
         if page.get("missing"):
@@ -204,8 +211,37 @@ class WikiClient:
         )
         parsed = data.get("parse")
         if not parsed:
-            raise WikiError(f"Page '{title}' was not found.")
+            raise PageNotFoundError(f"Page '{title}' was not found.")
         return parsed.get("title", title), parsed.get("wikitext", "")
+
+    async def resolve_page(
+        self, query: str, *, suffix: str | None = None
+    ) -> tuple[str, str] | None:
+        """Resolve a partial name to ``(title, wikitext)`` using search.
+
+        Returns ``None`` when no page matches.
+        """
+        try:
+            return await self.wikitext(query)
+        except PageNotFoundError:
+            pass
+
+        candidates = [query]
+        if suffix and not query.lower().rstrip().endswith(suffix.lower()):
+            candidates.append(f"{query} {suffix}")
+
+        seen: set[str] = set()
+        for candidate in candidates:
+            results = await self.search(candidate, limit=5)
+            for result in results:
+                if result.title in seen:
+                    continue
+                seen.add(result.title)
+                try:
+                    return await self.wikitext(result.title)
+                except PageNotFoundError:
+                    continue
+        return None
 
     async def category_members(self, category: str, limit: int | str = "max") -> list[str]:
         data = await self._request(

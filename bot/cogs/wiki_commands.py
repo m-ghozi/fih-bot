@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 import discord
@@ -9,12 +8,9 @@ from discord.ext import commands
 
 from ..parsing import parse_codes, parse_infobox
 from ..ui import Paginator, truncate
-from ..wiki import WikiError
 
 if TYPE_CHECKING:
     from ..client import FischBot
-
-log = logging.getLogger(__name__)
 
 COLOR = discord.Color.from_str("#3ba7d8")
 FOOTER = "Source: Official Fisch Wiki • CC BY-NC-SA 4.0"
@@ -89,37 +85,6 @@ class WikiCommands(commands.Cog):
             await ctx.send(embed=pages[0], view=view)
         else:
             await ctx.send(embed=pages[0])
-
-    @staticmethod
-    def _error_message(error: Exception) -> str:
-        # Unwrap CommandInvokeError layers to inspect the real exception.
-        original = getattr(error, "original", None)
-        while original is not None:
-            error = original
-            original = getattr(error, "original", None)
-
-        if isinstance(error, (commands.CommandOnCooldown, app_commands.CommandOnCooldown)):
-            return f"Slow down. Try again in **{error.retry_after:.1f} seconds**."
-        if isinstance(error, WikiError):
-            return f"Failed to fetch data from the wiki: {error}"
-        log.error("Unhandled command error: %r", error)
-        return "Something went wrong. Please try again in a moment."
-
-    # ---------------------------------------------------------------- errors
-
-    async def cog_command_error(
-        self, ctx: commands.Context, error: commands.CommandError
-    ) -> None:
-        await ctx.send(self._error_message(error))
-
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ) -> None:
-        message = self._error_message(error)
-        if interaction.response.is_done():
-            await interaction.followup.send(message, ephemeral=True)
-        else:
-            await interaction.response.send_message(message, ephemeral=True)
 
     # ----------------------------------------------------------- commands
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Callable
 
 import discord
@@ -17,8 +16,6 @@ from ..wiki import WikiError
 
 if TYPE_CHECKING:
     from ..client import FischBot
-
-log = logging.getLogger(__name__)
 
 COLOR = discord.Color.from_str("#3ba7d8")
 FOOTER = "Source: Official Fisch Wiki • CC BY-NC-SA 4.0"
@@ -112,6 +109,17 @@ class RodCommands(commands.Cog):
     # ------------------------------------------------------------ helpers
 
     @staticmethod
+    def _not_found_embed(query: str) -> discord.Embed:
+        return discord.Embed(
+            title="Page not found",
+            description=(
+                f"No wiki page matches **{query}**. "
+                f"Check the spelling or try `!wiki {query}`."
+            ),
+            color=discord.Color.orange(),
+        )
+
+    @staticmethod
     def _not_rod_embed(title: str, command: str) -> discord.Embed:
         return discord.Embed(
             title="Not a fishing rod page",
@@ -148,7 +156,11 @@ class RodCommands(commands.Cog):
     @commands.cooldown(2, 8.0, commands.BucketType.user)
     async def rod(self, ctx: commands.Context, *, name: str) -> None:
         await ctx.defer()
-        title, wikitext = await self.wiki.wikitext(name)
+        resolved = await self.wiki.resolve_page(name, suffix="Rod")
+        if resolved is None:
+            await self._send(ctx, self._not_found_embed(name))
+            return
+        title, wikitext = resolved
         box = parse_infobox(wikitext, "RodInfobox")
         if box is None:
             await self._send(ctx, self._not_rod_embed(title, "rod"))
@@ -192,7 +204,11 @@ class RodCommands(commands.Cog):
     @commands.cooldown(2, 8.0, commands.BucketType.user)
     async def enchant(self, ctx: commands.Context, *, name: str) -> None:
         await ctx.defer()
-        title, wikitext = await self.wiki.wikitext(name)
+        resolved = await self.wiki.resolve_page(name, suffix="Rod")
+        if resolved is None:
+            await self._send(ctx, self._not_found_embed(name))
+            return
+        title, wikitext = resolved
         section = extract_section(wikitext, "Enchanting")
 
         if not section or parse_infobox(section, "Enchanting") is None:

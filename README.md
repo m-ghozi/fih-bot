@@ -29,7 +29,7 @@ Examples:
 !codes all
 ```
 
-`/rod` and `/enchant` also offer slash-command autocomplete for rod names.
+`/rod` and `/enchant` also offer slash-command autocomplete for rod names. Partial names work too, e.g. `!rod trident` or `!rod no-life`.
 
 Every result includes a link to the original page. API responses are cached for 5 minutes
 so repeated commands do not hammer the wiki.
