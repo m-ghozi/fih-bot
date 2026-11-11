@@ -44,33 +44,12 @@ USAGE: dict[str, str] = {
 }
 
 COG_LABELS: dict[str, str] = {
-    "WikiCommands": "📚 Wiki",
-    "RodCommands": "🎣 Rods",
-    "CatalogCommands": "📦 Items",
-    "ScheduleCommands": "🌍 Schedule",
-    "GeneralCommands": "⚙️ General",
+    "WikiCommands": "Wiki",
+    "RodCommands": "Rods",
+    "CatalogCommands": "Items",
+    "ScheduleCommands": "Schedule",
+    "GeneralCommands": "General",
 }
-
-# Every command gets an icon so the help output is visually consistent.
-COMMAND_EMOJI: dict[str, str] = {
-    "wiki": "🔎",
-    "page": "📄",
-    "fish": "🐟",
-    "codes": "🎁",
-    "rod": "🎣",
-    "enchant": "✨",
-    "mutations": "🧬",
-    "bait": "🪱",
-    "harpoon": "🎯",
-    "spear": "🔱",
-    "seasons": "🌍",
-    "spawn": "🌊",
-    "status": "📊",
-    "info": "ℹ️",
-    "help": "📖",
-}
-
-DEFAULT_EMOJI = "🔹"
 
 
 def _format_duration(seconds: float) -> str:
@@ -112,8 +91,7 @@ class GeneralCommands(commands.Cog):
         usage = USAGE.get(command.name, f"{prefix}{command.name}")
         usage = usage.format(p=prefix)
         description = command.description or command.short_doc or "No description."
-        emoji = COMMAND_EMOJI.get(command.name, DEFAULT_EMOJI)
-        return f"{emoji} `{usage}`\n{truncate(description, 160)}"
+        return f"`{usage}`\n{truncate(description, 160)}"
 
     def _help_pages(self, prefix: str) -> list[discord.Embed]:
         groups: dict[str, list[commands.Command]] = {}
@@ -122,7 +100,7 @@ class GeneralCommands(commands.Cog):
             groups.setdefault(cog_name, []).append(command)
 
         embed = discord.Embed(
-            title="📖 Fisch Wiki Bot — Help",
+            title="Fisch Wiki Bot — Help",
             description=(
                 f"All commands work as prefix (`{prefix}`) or slash (`/`).\n"
                 f"Use `{prefix}help <command>` or `/help command:<name>` "
@@ -151,9 +129,8 @@ class GeneralCommands(commands.Cog):
     @staticmethod
     def _command_detail(command: commands.Command, prefix: str) -> discord.Embed:
         usage = USAGE.get(command.name, f"{prefix}{command.name}").format(p=prefix)
-        emoji = COMMAND_EMOJI.get(command.name, DEFAULT_EMOJI)
         embed = discord.Embed(
-            title=f"{emoji} {prefix}{command.name} / /{command.name}",
+            title=f"{prefix}{command.name} / /{command.name}",
             description=command.description or command.short_doc or "No description.",
             color=COLOR,
         )
