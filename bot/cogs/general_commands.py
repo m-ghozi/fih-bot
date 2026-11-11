@@ -32,6 +32,10 @@ USAGE: dict[str, str] = {
     "codes": "{p}codes [active|inactive|all]",
     "rod": "{p}rod <name>",
     "enchant": "{p}enchant <name>",
+    "mutations": "{p}mutations [query]",
+    "bait": "{p}bait [query]",
+    "harpoon": "{p}harpoon [query]",
+    "spear": "{p}spear [query]",
     "seasons": "{p}seasons",
     "spawn": "{p}spawn",
     "status": "{p}status",
@@ -42,6 +46,7 @@ USAGE: dict[str, str] = {
 COG_LABELS: dict[str, str] = {
     "WikiCommands": "📚 Wiki",
     "RodCommands": "🎣 Rods",
+    "CatalogCommands": "📦 Items",
     "ScheduleCommands": "🌍 Schedule",
     "GeneralCommands": "⚙️ General",
 }

@@ -236,6 +236,21 @@ class WikiClient:
             raise PageNotFoundError(f"Page '{title}' was not found.")
         return parsed.get("title", title), parsed.get("wikitext", "")
 
+    async def parsed_html(self, page: str) -> tuple[str, str]:
+        """Return ``(title, rendered_html)`` for a page."""
+        data = await self._request(
+            {
+                "action": "parse",
+                "page": page,
+                "prop": "text",
+                "redirects": 1,
+            }
+        )
+        parsed = data.get("parse")
+        if not parsed:
+            raise PageNotFoundError(f"Page '{page}' was not found.")
+        return parsed.get("title", page), parsed.get("text", "")
+
     async def resolve_page(
         self, query: str, *, suffix: str | None = None
     ) -> tuple[str, str] | None:

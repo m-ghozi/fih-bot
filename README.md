@@ -18,6 +18,10 @@ All commands work both as prefix commands (`!`) and slash commands (`/`).
 | `!rod <name>` / `/rod` | Show fishing rod stats (stage, price, lure, luck, control, resilience, max kg, line distance, disturbance) and its ability. |
 | `!enchant <name>` / `/enchant` | Show the wiki's recommended enchantments for a rod (keeperbound, optimal grinding, and other options). |
 | `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
+| `!mutations [query]` / `/mutations` | List fish mutations with value multipliers, priority, source, and appraisable chance. |
+| `!bait [query]` / `/bait` | List bait rarity, preferred/universal luck, resilience, lure speed, and abilities. |
+| `!harpoon [query]` / `/harpoon` | List harpoon gun stats: power, range, reload, velocity, resilience, accuracy, and max kg. |
+| `!spear [query]` / `/spear` | List spear stats: power, handling, piercing, location, and source. |
 | `!seasons` / `/seasons` | Show the current season, upcoming rotation, and seasonal spawn-rate effects. |
 | `!spawn` / `/spawn` | Show the next global spawns (Mosslurker, Narwhal Migration, Dreadfin) and the Daily Shop reset. |
 | `!status` / `/status` | Show bot health, WebSocket and wiki API latency, uptime, and server info. |
@@ -32,6 +36,10 @@ Examples:
 !rod trident rod
 !enchant no-life rod
 !codes all
+!mutations ghost
+!bait worm
+!harpoon crystal
+!spear artisan
 !seasons
 !spawn
 !status
@@ -111,11 +119,13 @@ fih-bot/
 │   ├── config.py             # .env loading
 │   ├── wiki.py               # MediaWiki API client + cache + retry
 │   ├── parsing.py            # wikitext parser (infobox, code tables, templates)
+│   ├── catalogs.py           # mutation/bait/harpoon/spear table parser + cache
 │   ├── schedule.py           # season cycle + recurring spawn timers
 │   ├── ui.py                 # pagination buttons
 │   └── cogs/
 │       ├── wiki_commands.py  # /wiki, /page, /fish, /codes
 │       ├── rod_commands.py   # /rod, /enchant
+│       ├── catalog_commands.py # /mutations, /bait, /harpoon, /spear
 │       ├── schedule_commands.py # /seasons, /spawn
 │       └── general_commands.py # /status, /info, /help
 └── scripts/
@@ -133,6 +143,8 @@ fih-bot/
   *Inactive Codes* tables are parsed
 - `/seasons` and `/spawn` → computed locally from the fixed wiki schedules
   (`Template:Seasons`, `Template:Main page settings/events`); no API call is needed
+- `/mutations`, `/bait`, `/harpoon`, `/spear` → rendered tables from the
+  `Mutations`, `Bait`, `Harpoon Guns`, and `Spears` pages, parsed once and cached for an hour
 
 Because this is API-based, layout changes will not break the bot as long as the
 `FishInfobox` template name and the code table structure stay roughly the same.

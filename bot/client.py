@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import discord
 from discord.ext import commands
 
+from .cogs.catalog_commands import CatalogCommands
 from .cogs.general_commands import GeneralCommands
 from .cogs.rod_commands import RodCommands
 from .cogs.schedule_commands import ScheduleCommands
@@ -55,6 +56,7 @@ class FischBot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.add_cog(WikiCommands(self))
         await self.add_cog(RodCommands(self))
+        await self.add_cog(CatalogCommands(self))
         await self.add_cog(ScheduleCommands(self))
         await self.add_cog(GeneralCommands(self))
 
