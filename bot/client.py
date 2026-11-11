@@ -60,14 +60,19 @@ class FischBot(commands.Bot):
         await self.add_cog(ScheduleCommands(self))
         await self.add_cog(GeneralCommands(self))
 
+        # Always sync globally so every server that invites the bot sees the
+        # full command list. This also replaces commands from older versions.
+        synced = await self.tree.sync()
+        log.info("Synced %d global commands", len(synced))
+
+        # Optionally sync to the development guild as well, which makes new
+        # commands available there immediately instead of waiting for the
+        # global propagation.
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)
             self.tree.copy_global_to(guild=guild)
             synced = await self.tree.sync(guild=guild)
             log.info("Synced %d commands to guild %s", len(synced), guild.id)
-        else:
-            synced = await self.tree.sync()
-            log.info("Synced %d global commands", len(synced))
 
     async def on_ready(self) -> None:
         assert self.user is not None

@@ -84,8 +84,9 @@ DISCORD_TOKEN=your_bot_token
 GUILD_ID=your_server_id   # optional, makes commands appear faster
 ```
 
-`GUILD_ID` is useful during development: commands appear immediately in that server. If
-left empty, commands are synced globally (this can take a few minutes).
+`GUILD_ID` is useful during development: the bot always syncs commands globally so
+every server sees them, and it additionally syncs to this guild so changes show up
+immediately there. Global command updates can take a few minutes to reach all servers.
 
 ## 3. Running
 
