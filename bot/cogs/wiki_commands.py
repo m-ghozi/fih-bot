@@ -78,6 +78,16 @@ class WikiCommands(commands.Cog):
         self.bot = bot
         self.wiki = bot.wiki
 
+    async def _send_pages(
+        self, interaction: discord.Interaction, pages: list[discord.Embed]
+    ) -> None:
+        """Send the first page, attaching a paginator only when needed."""
+        if len(pages) > 1:
+            view = Paginator(pages, author_id=interaction.user.id)
+            await interaction.followup.send(embed=pages[0], view=view)
+        else:
+            await interaction.followup.send(embed=pages[0])
+
     # ------------------------------------------------------------- errors
 
     async def cog_app_command_error(
@@ -115,8 +125,7 @@ class WikiCommands(commands.Cog):
             return
 
         pages = _search_pages(query, results)
-        view = Paginator(pages, author_id=interaction.user.id) if len(pages) > 1 else None
-        await interaction.followup.send(embed=pages[0], view=view)
+        await self._send_pages(interaction, pages)
 
     @app_commands.command(name="page", description="Show a summary of a wiki page")
     @app_commands.describe(title="Page title, e.g. 'Fisch', 'Codes', or 'Fishing Rods'")
@@ -227,5 +236,4 @@ class WikiCommands(commands.Cog):
 
         labels = {"active": "Active", "inactive": "Inactive", "all": "All"}
         pages = _code_pages(all_codes, labels[selected])
-        view = Paginator(pages, author_id=interaction.user.id) if len(pages) > 1 else None
-        await interaction.followup.send(embed=pages[0], view=view)
+        await self._send_pages(interaction, pages)
