@@ -18,6 +18,8 @@ All commands work both as prefix commands (`!`) and slash commands (`/`).
 | `!rod <name>` / `/rod` | Show fishing rod stats (stage, price, lure, luck, control, resilience, max kg, line distance, disturbance) and its ability. |
 | `!enchant <name>` / `/enchant` | Show the wiki's recommended enchantments for a rod (keeperbound, optimal grinding, and other options). |
 | `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
+| `!seasons` / `/seasons` | Show the current season, upcoming rotation, and seasonal spawn-rate effects. |
+| `!spawn` / `/spawn` | Show the next global spawns (Mosslurker, Narwhal Migration, Dreadfin) and the Daily Shop reset. |
 | `!status` / `/status` | Show bot health, WebSocket and wiki API latency, uptime, and server info. |
 | `!info` / `/info` | Show developer, source code, version, and data-source information. |
 | `!help [command]` / `/help` | List every command, or show usage and parameters for one command. |
@@ -30,6 +32,8 @@ Examples:
 !rod trident rod
 !enchant no-life rod
 !codes all
+!seasons
+!spawn
 !status
 !info
 !help rod
@@ -107,10 +111,12 @@ fih-bot/
 │   ├── config.py             # .env loading
 │   ├── wiki.py               # MediaWiki API client + cache + retry
 │   ├── parsing.py            # wikitext parser (infobox, code tables, templates)
+│   ├── schedule.py           # season cycle + recurring spawn timers
 │   ├── ui.py                 # pagination buttons
 │   └── cogs/
 │       ├── wiki_commands.py  # /wiki, /page, /fish, /codes
 │       ├── rod_commands.py   # /rod, /enchant
+│       ├── schedule_commands.py # /seasons, /spawn
 │       └── general_commands.py # /status, /info, /help
 └── scripts/
     └── check_wiki.py         # scraper check without Discord
@@ -125,6 +131,8 @@ fih-bot/
 - `/enchant` → the `== Enchanting ==` section is parsed from the rod page
 - `/codes` → `action=parse&prop=wikitext` for the `Codes` page, then the *Active Codes* /
   *Inactive Codes* tables are parsed
+- `/seasons` and `/spawn` → computed locally from the fixed wiki schedules
+  (`Template:Seasons`, `Template:Main page settings/events`); no API call is needed
 
 Because this is API-based, layout changes will not break the bot as long as the
 `FishInfobox` template name and the code table structure stay roughly the same.

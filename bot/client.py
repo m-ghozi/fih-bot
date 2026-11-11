@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from .cogs.general_commands import GeneralCommands
 from .cogs.rod_commands import RodCommands
+from .cogs.schedule_commands import ScheduleCommands
 from .cogs.wiki_commands import WikiCommands
 from .config import Settings
 from .errors import describe_command_error
@@ -54,6 +55,7 @@ class FischBot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.add_cog(WikiCommands(self))
         await self.add_cog(RodCommands(self))
+        await self.add_cog(ScheduleCommands(self))
         await self.add_cog(GeneralCommands(self))
 
         if self.settings.guild_id:
