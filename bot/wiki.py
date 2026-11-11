@@ -1,4 +1,4 @@
-"""Klien kecil untuk MediaWiki API Official Fisch Wiki."""
+"""Small client for the Official Fisch Wiki MediaWiki API."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ _CACHE_LIMIT = 512
 
 
 class WikiError(Exception):
-    """Kesalahan saat berkomunikasi dengan wiki."""
+    """Raised when communication with the wiki fails."""
 
 
 @dataclass(frozen=True)
@@ -105,22 +105,22 @@ class WikiClient:
                     timeout = aiohttp.ClientTimeout(total=self.timeout)
                     async with session.get(self.api_url, params=payload, timeout=timeout) as resp:
                         if resp.status == 429:
-                            raise WikiError("Wiki membatasi permintaan (HTTP 429). Coba lagi nanti.")
+                            raise WikiError("The wiki is rate limiting requests (HTTP 429). Try again later.")
                         if resp.status >= 500:
-                            raise WikiError(f"Wiki sedang bermasalah (HTTP {resp.status}).")
+                            raise WikiError(f"The wiki is having issues (HTTP {resp.status}).")
                         resp.raise_for_status()
                         data = await resp.json(content_type=None)
                     break
                 except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
                     last_error = exc
                     if attempt == 2:
-                        raise WikiError(f"Gagal menghubungi wiki: {exc}") from exc
+                        raise WikiError(f"Could not reach the wiki: {exc}") from exc
                     await asyncio.sleep(0.6 * (attempt + 1))
 
         if not isinstance(data, dict):
-            raise WikiError("Respons wiki tidak valid.")
+            raise WikiError("The wiki returned an invalid response.")
         if "error" in data:
-            info = data["error"].get("info") or data["error"].get("code") or "kesalahan tidak diketahui"
+            info = data["error"].get("info") or data["error"].get("code") or "unknown error"
             raise WikiError(f"Wiki API: {info}")
 
         self._cache_set(key, data)
@@ -172,7 +172,7 @@ class WikiClient:
         )
         pages = data.get("query", {}).get("pages", []) or []
         if not pages:
-            raise WikiError(f"Halaman '{title}' tidak ditemukan.")
+            raise WikiError(f"Page '{title}' was not found.")
         page = pages[0]
         resolved_title = page.get("title", title)
         if page.get("missing"):
@@ -193,7 +193,7 @@ class WikiClient:
         )
 
     async def wikitext(self, title: str) -> tuple[str, str]:
-        """Kembalikan ``(judul_setelah_redirect, wikitext)``."""
+        """Return ``(title_after_redirect, wikitext)``."""
         data = await self._request(
             {
                 "action": "parse",
@@ -204,7 +204,7 @@ class WikiClient:
         )
         parsed = data.get("parse")
         if not parsed:
-            raise WikiError(f"Halaman '{title}' tidak ditemukan.")
+            raise WikiError(f"Page '{title}' was not found.")
         return parsed.get("title", title), parsed.get("wikitext", "")
 
     async def thumbnail(self, title: str) -> str | None:

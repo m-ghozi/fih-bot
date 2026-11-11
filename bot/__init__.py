@@ -1,3 +1,3 @@
-"""Bot Discord untuk mengambil informasi dari Official Fisch Wiki."""
+"""Discord bot that fetches information from the Official Fisch Wiki."""
 
 __version__ = "1.0.0"

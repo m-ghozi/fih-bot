@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point bot Discord Fisch Wiki."""
+"""Entry point for the Fisch Wiki Discord bot."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ def main() -> int:
     settings = Settings.load()
     if not settings.token:
         print(
-            "DISCORD_TOKEN belum diisi.\n"
-            "Salin .env.example menjadi .env lalu isi token bot kamu.",
+            "DISCORD_TOKEN is not set.\n"
+            "Copy .env.example to .env and fill in your bot token.",
             file=sys.stderr,
         )
         return 1
@@ -39,17 +39,17 @@ def main() -> int:
     try:
         asyncio.run(run_bot(settings))
     except KeyboardInterrupt:
-        print("\nBot dihentikan.")
+        print("\nBot stopped.")
     except discord.LoginFailure:
         print(
-            "Token Discord tidak valid. Periksa kembali nilai DISCORD_TOKEN di .env.",
+            "Invalid Discord token. Check the DISCORD_TOKEN value in .env.",
             file=sys.stderr,
         )
         return 1
     except discord.PrivilegedIntentsRequired:
         print(
-            "Bot membutuhkan privileged intent yang belum diaktifkan.\n"
-            "Buka Discord Developer Portal > Bot > Privileged Gateway Intents.",
+            "The bot requires a privileged intent that is not enabled.\n"
+            "Open Discord Developer Portal > Bot > Privileged Gateway Intents.",
             file=sys.stderr,
         )
         return 1

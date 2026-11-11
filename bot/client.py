@@ -33,14 +33,14 @@ class FischBot(commands.Bot):
             guild = discord.Object(id=self.settings.guild_id)
             self.tree.copy_global_to(guild=guild)
             synced = await self.tree.sync(guild=guild)
-            log.info("Sinkron %d command ke guild %s", len(synced), guild.id)
+            log.info("Synced %d commands to guild %s", len(synced), guild.id)
         else:
             synced = await self.tree.sync()
-            log.info("Sinkron %d command global", len(synced))
+            log.info("Synced %d global commands", len(synced))
 
     async def on_ready(self) -> None:
         assert self.user is not None
-        log.info("Login sebagai %s (id: %s)", self.user, self.user.id)
+        log.info("Logged in as %s (id: %s)", self.user, self.user.id)
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching,

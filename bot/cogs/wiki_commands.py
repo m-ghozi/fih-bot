@@ -17,12 +17,12 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 COLOR = discord.Color.from_str("#3ba7d8")
-FOOTER = "Sumber: Official Fisch Wiki • CC BY-NC-SA 4.0"
+FOOTER = "Source: Official Fisch Wiki • CC BY-NC-SA 4.0"
 
 STATUS_CHOICES = [
-    app_commands.Choice(name="Aktif", value="active"),
-    app_commands.Choice(name="Tidak aktif", value="inactive"),
-    app_commands.Choice(name="Semua", value="all"),
+    app_commands.Choice(name="Active", value="active"),
+    app_commands.Choice(name="Inactive", value="inactive"),
+    app_commands.Choice(name="All", value="all"),
 ]
 
 
@@ -31,17 +31,17 @@ def _search_pages(query: str, results: list, per_page: int = 6) -> list[discord.
     pages: list[discord.Embed] = []
     for index, chunk in enumerate(chunks, start=1):
         embed = discord.Embed(
-            title=f"🔎 Hasil pencarian: {query}",
+            title=f"🔎 Search results: {query}",
             color=COLOR,
-            description=f"Ditemukan **{len(results)}** halaman yang cocok.",
+            description=f"Found **{len(results)}** matching pages.",
         )
         for result in chunk:
             embed.add_field(
                 name=truncate(result.title, 250),
-                value=f"{truncate(result.snippet, 240)}\n[Lihat halaman]({result.url})",
+                value=f"{truncate(result.snippet, 240)}\n[View page]({result.url})",
                 inline=False,
             )
-        embed.set_footer(text=f"{FOOTER} • halaman {index}/{len(chunks)}")
+        embed.set_footer(text=f"{FOOTER} • page {index}/{len(chunks)}")
         pages.append(embed)
     return pages
 
@@ -49,24 +49,26 @@ def _search_pages(query: str, results: list, per_page: int = 6) -> list[discord.
 def _code_block(code: dict[str, str]) -> str:
     lines = [f"**{code['code']}**  ·  Level `{code['level'] or 'N/A'}`"]
     if code["added"]:
-        lines.append(f"Ditambahkan: {code['added']}")
+        lines.append(f"Added: {code['added']}")
     if code["expires"]:
-        lines.append(f"Kedaluwarsa: {code['expires']}")
+        lines.append(f"Expires: {code['expires']}")
     if code["rewards"]:
-        lines.append(f"Hadiah: {truncate(code['rewards'], 280)}")
+        lines.append(f"Rewards: {truncate(code['rewards'], 280)}")
     return "\n".join(lines)
 
 
-def _code_pages(codes: list[dict[str, str]], status_label: str, per_page: int = 5) -> list[discord.Embed]:
+def _code_pages(
+    codes: list[dict[str, str]], status_label: str, per_page: int = 5
+) -> list[discord.Embed]:
     chunks = [codes[i : i + per_page] for i in range(0, len(codes), per_page)]
     pages: list[discord.Embed] = []
     for index, chunk in enumerate(chunks, start=1):
         embed = discord.Embed(
-            title=f"🎁 Kode {status_label}",
+            title=f"🎁 {status_label} Codes",
             color=COLOR,
             description="\n\n".join(_code_block(code) for code in chunk),
         )
-        embed.set_footer(text=f"{FOOTER} • {len(codes)} kode • halaman {index}/{len(chunks)}")
+        embed.set_footer(text=f"{FOOTER} • {len(codes)} codes • page {index}/{len(chunks)}")
         pages.append(embed)
     return pages
 
@@ -82,12 +84,12 @@ class WikiCommands(commands.Cog):
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
         if isinstance(error, app_commands.CommandOnCooldown):
-            message = f"Pelan-pelan. Coba lagi dalam **{error.retry_after:.1f} detik**."
+            message = f"Slow down. Try again in **{error.retry_after:.1f} seconds**."
         elif isinstance(error, WikiError):
-            message = f"Gagal mengambil data dari wiki: {error}"
+            message = f"Failed to fetch data from the wiki: {error}"
         else:
             log.error("Unhandled command error: %r", error)
-            message = "Terjadi kesalahan tak terduga. Coba lagi sebentar lagi."
+            message = "Something went wrong. Please try again in a moment."
 
         if interaction.response.is_done():
             await interaction.followup.send(message, ephemeral=True)
@@ -96,8 +98,8 @@ class WikiCommands(commands.Cog):
 
     # ----------------------------------------------------------- commands
 
-    @app_commands.command(name="wiki", description="Cari halaman di Official Fisch Wiki")
-    @app_commands.describe(query="Kata kunci, misalnya 'salmon' atau 'fishing rod'")
+    @app_commands.command(name="wiki", description="Search pages on the Official Fisch Wiki")
+    @app_commands.describe(query="Search keywords, e.g. 'salmon' or 'fishing rod'")
     @app_commands.checks.cooldown(2, 8.0)
     async def wiki_search(self, interaction: discord.Interaction, query: str) -> None:
         await interaction.response.defer()
@@ -105,8 +107,8 @@ class WikiCommands(commands.Cog):
         if not results:
             await interaction.followup.send(
                 embed=discord.Embed(
-                    title="Tidak ada hasil",
-                    description=f"Tidak ada halaman yang cocok dengan **{query}**.",
+                    title="No results",
+                    description=f"No pages match **{query}**.",
                     color=discord.Color.orange(),
                 )
             )
@@ -116,8 +118,8 @@ class WikiCommands(commands.Cog):
         view = Paginator(pages, author_id=interaction.user.id) if len(pages) > 1 else None
         await interaction.followup.send(embed=pages[0], view=view)
 
-    @app_commands.command(name="page", description="Tampilkan ringkasan sebuah halaman wiki")
-    @app_commands.describe(title="Judul halaman, misalnya 'Fisch', 'Codes', atau 'Fishing Rods'")
+    @app_commands.command(name="page", description="Show a summary of a wiki page")
+    @app_commands.describe(title="Page title, e.g. 'Fisch', 'Codes', or 'Fishing Rods'")
     @app_commands.checks.cooldown(2, 8.0)
     async def page(self, interaction: discord.Interaction, title: str) -> None:
         await interaction.response.defer()
@@ -125,8 +127,11 @@ class WikiCommands(commands.Cog):
         if info.missing:
             await interaction.followup.send(
                 embed=discord.Embed(
-                    title="Halaman tidak ditemukan",
-                    description=f"**{title}** tidak ada di wiki. Coba `/wiki {title}` untuk mencari.",
+                    title="Page not found",
+                    description=(
+                        f"**{title}** does not exist on the wiki. "
+                        f"Try `/wiki {title}` to search for it."
+                    ),
                     color=discord.Color.orange(),
                 )
             )
@@ -135,7 +140,7 @@ class WikiCommands(commands.Cog):
         embed = discord.Embed(
             title=info.title,
             url=info.url,
-            description=truncate(info.extract or "Halaman ini belum punya ringkasan.", 3900),
+            description=truncate(info.extract or "This page has no summary yet.", 3900),
             color=COLOR,
         )
         if info.thumbnail:
@@ -143,8 +148,8 @@ class WikiCommands(commands.Cog):
         embed.set_footer(text=FOOTER)
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="fish", description="Tampilkan data ikan dari infobox wiki")
-    @app_commands.describe(name="Nama ikan, misalnya 'Salmon' atau 'Megalodon'")
+    @app_commands.command(name="fish", description="Show fish data from the wiki infobox")
+    @app_commands.describe(name="Fish name, e.g. 'Salmon' or 'Megalodon'")
     @app_commands.checks.cooldown(2, 8.0)
     async def fish(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer()
@@ -153,10 +158,10 @@ class WikiCommands(commands.Cog):
         if box is None:
             await interaction.followup.send(
                 embed=discord.Embed(
-                    title="Bukan halaman ikan",
+                    title="Not a fish page",
                     description=(
-                        f"**{resolved_title}** tidak punya infobox ikan. "
-                        f"Coba `/page {resolved_title}` untuk melihat isinya."
+                        f"**{resolved_title}** has no fish infobox. "
+                        f"Try `/page {resolved_title}` to read its content."
                     ),
                     color=discord.Color.orange(),
                 )
@@ -169,16 +174,16 @@ class WikiCommands(commands.Cog):
         fields = [
             ("Rarity", box.get("rarity")),
             ("Bestiary", box.get("bestiary")),
-            ("Lokasi", box.get("location")),
-            ("Sumber", box.get("source")),
-            ("Cuaca", box.get("weather")),
-            ("Musim", box.get("season")),
-            ("Umpan", box.get("bait")),
+            ("Location", box.get("location")),
+            ("Source", box.get("source")),
+            ("Weather", box.get("weather")),
+            ("Season", box.get("season")),
+            ("Bait", box.get("bait")),
             ("XP", box.get("xp")),
-            ("Harga dasar", box.get("base_value")),
-            ("Berat dasar", box.get("base_weight")),
-            ("Rentang berat", box.get("weight_range")),
-            ("Peluang tangkap", box.get("base_chance")),
+            ("Base value", box.get("base_value")),
+            ("Base weight", box.get("base_weight")),
+            ("Weight range", box.get("weight_range")),
+            ("Catch chance", box.get("base_chance")),
             ("Resilience", box.get("base_resil")),
             ("Radar", box.get("radar")),
         ]
@@ -193,8 +198,8 @@ class WikiCommands(commands.Cog):
         embed.set_footer(text=FOOTER)
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="codes", description="Tampilkan daftar kode redeem Fisch")
-    @app_commands.describe(status="Pilih kode aktif, tidak aktif, atau semua")
+    @app_commands.command(name="codes", description="Show Fisch redeem codes")
+    @app_commands.describe(status="Choose active, inactive, or all codes")
     @app_commands.choices(status=STATUS_CHOICES)
     @app_commands.checks.cooldown(2, 8.0)
     async def codes(
@@ -213,14 +218,14 @@ class WikiCommands(commands.Cog):
         if not all_codes:
             await interaction.followup.send(
                 embed=discord.Embed(
-                    title="Tidak ada kode",
-                    description="Tidak ada kode untuk kategori yang dipilih.",
+                    title="No codes",
+                    description="No codes found for the selected category.",
                     color=discord.Color.orange(),
                 )
             )
             return
 
-        labels = {"active": "aktif", "inactive": "tidak aktif", "all": "semua"}
+        labels = {"active": "Active", "inactive": "Inactive", "all": "All"}
         pages = _code_pages(all_codes, labels[selected])
         view = Paginator(pages, author_id=interaction.user.id) if len(pages) > 1 else None
         await interaction.followup.send(embed=pages[0], view=view)

@@ -1,39 +1,39 @@
 # Fisch Wiki Discord Bot
 
-Bot Discord untuk mengambil informasi dari [Official Fisch Wiki](https://fischipedia.org/wiki/Fisch_Wiki).
+A Discord bot that fetches information from the [Official Fisch Wiki](https://fischipedia.org/wiki/Fisch_Wiki).
 
-Bot ini **tidak** melakukan HTML scraping. Wiki Fisch berjalan di MediaWiki, jadi bot memakai
-**MediaWiki API resmi** (`https://fischipedia.org/w/api.php`) yang jauh lebih stabil dan ramah
-terhadap server wiki.
+This bot does **not** scrape HTML. The Fisch wiki runs on MediaWiki, so the bot uses the
+**official MediaWiki API** (`https://fischipedia.org/w/api.php`), which is far more stable
+and friendly to the wiki servers.
 
-## Fitur
+## Features
 
-| Command | Fungsi |
+| Command | Description |
 | --- | --- |
-| `/wiki <kata kunci>` | Mencari halaman di wiki (dengan pagination). |
-| `/page <judul>` | Menampilkan ringkasan sebuah halaman + link sumber. |
-| `/fish <nama>` | Menampilkan data ikan dari `FishInfobox`: rarity, lokasi, cuaca, musim, umpan, XP, harga, peluang, dll. |
-| `/codes [status]` | Daftar kode redeem (aktif / tidak aktif / semua) beserta hadiahnya. |
+| `/wiki <query>` | Search wiki pages (with pagination). |
+| `/page <title>` | Show a page summary plus a link to the source. |
+| `/fish <name>` | Show fish data from `FishInfobox`: rarity, location, weather, season, bait, XP, value, catch chance, and more. |
+| `/codes [status]` | List redeem codes (active / inactive / all) with their rewards. |
 
-Semua hasil menyertakan link ke halaman aslinya. Respons API di-cache selama 5 menit agar
-command yang sama tidak membebani wiki.
+Every result includes a link to the original page. API responses are cached for 5 minutes
+so repeated commands do not hammer the wiki.
 
-## Persyaratan
+## Requirements
 
 - Python 3.10+
-- Bot Discord (token)
+- A Discord bot (token)
 
-## 1. Membuat bot Discord
+## 1. Create a Discord bot
 
-1. Buka <https://discord.com/developers/applications> lalu klik **New Application**.
-2. Masuk ke tab **Bot**, klik **Reset Token**, lalu salin token-nya.
-3. Tidak perlu mengaktifkan *Message Content Intent* — bot hanya memakai slash command.
-4. Buka tab **OAuth2 → URL Generator**:
+1. Open <https://discord.com/developers/applications> and click **New Application**.
+2. Go to the **Bot** tab, click **Reset Token**, and copy the token.
+3. You do not need to enable *Message Content Intent* — the bot only uses slash commands.
+4. Open **OAuth2 → URL Generator**:
    - Scopes: `bot`, `applications.commands`
    - Bot Permissions: `Send Messages`, `Embed Links`
-5. Buka URL hasil generate untuk mengundang bot ke server kamu.
+5. Open the generated URL to invite the bot to your server.
 
-## 2. Instalasi
+## 2. Installation
 
 ```bash
 cd fih-bot
@@ -43,36 +43,37 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Isi `.env`:
+Fill in `.env`:
 
 ```env
-DISCORD_TOKEN=token_bot_kamu
-GUILD_ID=id_server_kamu   # opsional, mempercepat munculnya command
+DISCORD_TOKEN=your_bot_token
+GUILD_ID=your_server_id   # optional, makes commands appear faster
 ```
 
-`GUILD_ID` berguna saat development: command langsung muncul di server tersebut. Jika
-dikosongkan, command disinkronkan secara global (bisa butuh beberapa menit).
+`GUILD_ID` is useful during development: commands appear immediately in that server. If
+left empty, commands are synced globally (this can take a few minutes).
 
-## 3. Menjalankan
+## 3. Running
 
 ```bash
 python run.py
 ```
 
-Saat pertama kali jalan, command akan otomatis disinkronkan ke Discord.
+On the first run, commands are automatically synced to Discord.
 
-## Uji scraper tanpa Discord
+## Test the scraper without Discord
 
-Untuk memastikan API dan parser bekerja:
+To verify that the API and parser work:
 
 ```bash
 python scripts/check_wiki.py
 python scripts/check_wiki.py Megalodon
 ```
 
-Script ini menampilkan hasil pencarian, ringkasan halaman, isi `FishInfobox`, dan daftar kode.
+This script prints search results, the page summary, the `FishInfobox` contents, and the
+code list.
 
-## Struktur project
+## Project structure
 
 ```
 fih-bot/
@@ -80,33 +81,34 @@ fih-bot/
 ├── requirements.txt
 ├── .env.example
 ├── bot/
-│   ├── client.py             # subclass commands.Bot + sinkronisasi slash command
-│   ├── config.py             # pembacaan .env
-│   ├── wiki.py               # klien MediaWiki API + cache + retry
-│   ├── parsing.py            # parser wikitext (infobox, tabel kode, template)
-│   ├── ui.py                 # tombol pagination
+│   ├── client.py             # commands.Bot subclass + slash command sync
+│   ├── config.py             # .env loading
+│   ├── wiki.py               # MediaWiki API client + cache + retry
+│   ├── parsing.py            # wikitext parser (infobox, code tables, templates)
+│   ├── ui.py                 # pagination buttons
 │   └── cogs/
-│       └── wiki_commands.py  # definisi /wiki, /page, /fish, /codes
+│       └── wiki_commands.py  # /wiki, /page, /fish, /codes
 └── scripts/
-    └── check_wiki.py         # uji scraper tanpa Discord
+    └── check_wiki.py         # scraper check without Discord
 ```
 
-## Cara kerja pengambilan data
+## How data is fetched
 
 - `/wiki` → `action=query&list=search`
 - `/page` → `action=query&prop=extracts|pageimages`
-- `/fish` → `action=parse&prop=wikitext`, lalu parameter `{{FishInfobox}}` di-parse
-- `/codes` → `action=parse&prop=wikitext` halaman `Codes`, lalu tabel *Active Codes* /
-  *Inactive Codes* di-parse
+- `/fish` → `action=parse&prop=wikitext`, then the `{{FishInfobox}}` parameters are parsed
+- `/codes` → `action=parse&prop=wikitext` for the `Codes` page, then the *Active Codes* /
+  *Inactive Codes* tables are parsed
 
-Karena berbasis API, perubahan layout halaman tidak akan merusak bot selama nama template
-(`FishInfobox`) dan struktur tabel kode tidak berubah drastis.
+Because this is API-based, layout changes will not break the bot as long as the
+`FishInfobox` template name and the code table structure stay roughly the same.
 
-## Catatan
+## Notes
 
-- Isi wiki dilisensikan **CC BY-NC-SA 4.0**. Atribusi sumber sudah dicantumkan di footer
-  setiap embed. Jangan gunakan untuk keperluan komersial.
-- Hormati wiki: bot mengirim `User-Agent` yang jelas, memakai `maxlag=5`, dan melakukan
-  cache. Ubah `WIKI_USER_AGENT` agar menyertakan kontak kamu bila bot dipakai publik.
-- Jika wiki mengubah nama template atau struktur tabel kode, sesuaikan
+- Wiki content is licensed under **CC BY-NC-SA 4.0**. Source attribution is included in
+  every embed footer. Do not use it for commercial purposes.
+- Be respectful to the wiki: the bot sends a clear `User-Agent`, uses `maxlag=5`, and
+  caches responses. Update `WIKI_USER_AGENT` to include your contact info if the bot is
+  used publicly.
+- If the wiki renames the template or changes the code table structure, adjust
   `bot/parsing.py`.

@@ -1,1 +1,1 @@
-"""Cogs untuk bot Fisch Wiki."""
+"""Cogs for the Fisch Wiki bot."""

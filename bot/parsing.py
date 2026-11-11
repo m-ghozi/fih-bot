@@ -1,7 +1,7 @@
-"""Utilitas untuk mengubah wikitext MediaWiki menjadi data/teks yang rapi.
+"""Utilities for turning MediaWiki wikitext into clean data and text.
 
-Modul ini sengaja tidak bergantung pada discord.py supaya bisa diuji
-secara terpisah lewat ``scripts/check_wiki.py``.
+This module intentionally does not depend on discord.py so it can be tested
+separately through ``scripts/check_wiki.py``.
 """
 
 from __future__ import annotations
@@ -32,15 +32,15 @@ _MAX_TEMPLATE_PASSES = 25
 
 
 def strip_html(text: str) -> str:
-    """Hapus tag HTML dan decode entity."""
+    """Remove HTML tags and decode entities."""
     return html.unescape(_HTML_TAG_RE.sub("", text or ""))
 
 
 def split_top_level(text: str, sep: str = "|") -> list[str]:
-    """Split ``text`` pada ``sep`` yang berada di level teratas.
+    """Split ``text`` on top-level occurrences of ``sep``.
 
-    ``sep`` bisa berupa karakter tunggal atau beberapa karakter (mis. ``"||"``).
-    Isi di dalam ``{{ ... }}`` dan ``[[ ... ]]`` tidak ikut dipecah.
+    ``sep`` may be one character or several (e.g. ``"||"``). Content inside
+    ``{{ ... }}`` and ``[[ ... ]]`` is never split.
     """
     parts: list[str] = []
     buf: list[str] = []
@@ -80,7 +80,7 @@ def _zero_pad(value: str) -> str:
 
 
 def _render_template(name: str, args: list[str]) -> str:
-    """Ubah satu template menjadi teks biasa."""
+    """Turn a single template into plain text."""
     name = name.strip()
     lower = name.lower()
 
@@ -139,7 +139,7 @@ def _render_template(name: str, args: list[str]) -> str:
     if lower == "color":
         return ""
 
-    # Template tak dikenal: tampilkan argumen pertama bila ada.
+    # Unknown template: show the first positional argument when available.
     return pos(0) or named.get("text", "")
 
 
@@ -154,12 +154,12 @@ def _expand_templates(text: str) -> str:
         text = new_text
         if count == 0:
             break
-    # Sisa template yang tidak seimbang dibuang agar tidak tampil sebagai kode.
+    # Drop any unbalanced leftovers so they never show up as raw code.
     return re.sub(r"\{\{[^{}]*\}\}", "", text)
 
 
 def clean_wikitext(text: str) -> str:
-    """Konversi potongan wikitext menjadi teks yang enak dibaca."""
+    """Convert a wikitext snippet into readable text."""
     if not text:
         return ""
 
@@ -167,12 +167,12 @@ def clean_wikitext(text: str) -> str:
     text = _REF_SELF_RE.sub("", text)
     text = _FILE_LINK_RE.sub("", text)
     text = re.sub(r"<br\s*/?>", ", ", text, flags=re.IGNORECASE)
-    # Magic word dengan kurung tunggal yang dipakai wiki (mis. {space}).
+    # Single-brace magic words used by the wiki (e.g. {space}).
     text = re.sub(r"\{space\}", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"\{nbsp\}", "\u00a0", text, flags=re.IGNORECASE)
     text = _expand_templates(text)
 
-    # [[Halaman|label]] -> label, [[Halaman]] -> Halaman
+    # [[Page|label]] -> label, [[Page]] -> Page
     previous = None
     while previous != text:
         previous = text
@@ -188,7 +188,7 @@ def clean_wikitext(text: str) -> str:
 
 
 def _find_template_body(wikitext: str, template_name: str) -> str | None:
-    """Ambil isi template (tanpa ``{{ }}`` terluar) dengan pencocokan kurung."""
+    """Return the template body (without outer ``{{ }}``) using brace matching."""
     lowered = wikitext.lower()
     marker = "{{" + template_name.lower()
     start = lowered.find(marker)
@@ -215,16 +215,16 @@ def _find_template_body(wikitext: str, template_name: str) -> str | None:
 
 
 def parse_infobox(wikitext: str, template_name: str = "FishInfobox") -> dict[str, str] | None:
-    """Ambil parameter infobox dan bersihkan nilainya.
+    """Extract infobox parameters and clean their values.
 
-    Mengembalikan ``None`` jika template tidak ditemukan.
+    Returns ``None`` when the template is not found.
     """
     body = _find_template_body(wikitext, template_name)
     if body is None:
         return None
 
     parts = split_top_level(body, "|")
-    # parts[0] adalah nama template.
+    # parts[0] is the template name.
     params: dict[str, str] = {}
     for part in parts[1:]:
         match = _NAMED_PARAM_RE.match(part)
@@ -240,12 +240,12 @@ _META_SECTIONS = {"change history", "navigation", "references", "external links"
 
 
 def clean_extract(text: str) -> str:
-    """Rapikan teks hasil ``prop=extracts`` (buang heading, rapikan newline)."""
+    """Tidy text returned by ``prop=extracts`` (drop headings, fix newlines)."""
     if not text:
         return ""
-    lines = [line.strip() for line in text.splitlines()]
     cleaned: list[str] = []
-    for line in lines:
+    for line in text.splitlines():
+        line = line.strip()
         if not line:
             continue
         if line.startswith("=="):
@@ -257,9 +257,9 @@ def clean_extract(text: str) -> str:
 
 
 def parse_codes(wikitext: str) -> list[dict[str, str]]:
-    """Ambil daftar kode dari halaman ``Codes``.
+    """Extract the code list from the ``Codes`` page.
 
-    Mendukung tabel "Active Codes" dan "Inactive Codes" yang dipakai wiki.
+    Supports the "Active Codes" and "Inactive Codes" tables used by the wiki.
     """
     lines = wikitext.splitlines()
     codes: list[dict[str, str]] = []
@@ -271,7 +271,7 @@ def parse_codes(wikitext: str) -> list[dict[str, str]]:
             i += 1
             continue
 
-        # ---- Fase 1: baca caption dan baris header tabel.
+        # ---- Phase 1: read the caption and the table header row.
         i += 1
         caption = ""
         header: list[str] | None = None
@@ -287,11 +287,11 @@ def parse_codes(wikitext: str) -> list[dict[str, str]]:
                     clean_wikitext(cell) for cell in split_top_level(stripped[1:], "!!")
                 ]
             elif stripped.startswith("|") and not stripped.startswith("|-"):
-                break  # baris data pertama; header sudah terbaca
+                break  # first data row; header has been read
             i += 1
 
         if not header or header[0].strip().lower() != "code":
-            # Bukan tabel kode; lewati sampai akhir tabel.
+            # Not a code table; skip to the end of the table.
             while i < n and not lines[i].strip().startswith("|}"):
                 i += 1
             i += 1
@@ -325,7 +325,7 @@ def parse_codes(wikitext: str) -> list[dict[str, str]]:
                 }
             )
 
-        # ---- Fase 2: baca baris-baris data.
+        # ---- Phase 2: read the data rows.
         while i < n:
             stripped = lines[i].strip()
             if stripped.startswith("|}"):
@@ -344,7 +344,7 @@ def parse_codes(wikitext: str) -> list[dict[str, str]]:
 
 
 def pick(record: dict[str, Any], *keys: str) -> str:
-    """Ambil nilai pertama yang tidak kosong dari ``record``."""
+    """Return the first non-empty value from ``record``."""
     for key in keys:
         value = record.get(key)
         if value:

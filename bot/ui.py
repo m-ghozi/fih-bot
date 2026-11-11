@@ -6,7 +6,7 @@ __all__ = ["Paginator", "truncate"]
 
 
 def truncate(text: str, limit: int) -> str:
-    """Potong teks pada batas kata tanpa melewati ``limit`` karakter."""
+    """Truncate text at a word boundary without exceeding ``limit`` characters."""
     text = (text or "").strip()
     if len(text) <= limit:
         return text
@@ -18,12 +18,12 @@ def truncate(text: str, limit: int) -> str:
 
 
 class Paginator(discord.ui.View):
-    """View sederhana dengan tombol navigasi halaman."""
+    """Simple view with page navigation buttons."""
 
     def __init__(self, pages: list[discord.Embed], *, author_id: int, timeout: float = 180.0):
         super().__init__(timeout=timeout)
         if not pages:
-            raise ValueError("Paginator butuh minimal satu halaman.")
+            raise ValueError("Paginator requires at least one page.")
         self.pages = pages
         self.author_id = author_id
         self.index = 0
@@ -39,19 +39,19 @@ class Paginator(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
             await interaction.response.send_message(
-                "Tombol ini bukan untuk kamu. Jalankan command sendiri ya.",
+                "These buttons are not for you. Run the command yourself.",
                 ephemeral=True,
             )
             return False
         return True
 
-    @discord.ui.button(label="Sebelumnya", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.secondary)
     async def previous_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         self.index = max(0, self.index - 1)
         self._sync_buttons()
         await interaction.response.edit_message(embed=self.current(), view=self)
 
-    @discord.ui.button(label="Berikutnya", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
     async def next_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         self.index = min(len(self.pages) - 1, self.index + 1)
         self._sync_buttons()
