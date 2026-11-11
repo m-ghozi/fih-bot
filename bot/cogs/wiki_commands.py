@@ -78,29 +78,44 @@ class WikiCommands(commands.Cog):
         self.bot = bot
         self.wiki = bot.wiki
 
+    # --------------------------------------------------------------- helpers
+
     async def _send_pages(
-        self, interaction: discord.Interaction, pages: list[discord.Embed]
+        self, ctx: commands.Context, pages: list[discord.Embed]
     ) -> None:
         """Send the first page, attaching a paginator only when needed."""
         if len(pages) > 1:
-            view = Paginator(pages, author_id=interaction.user.id)
-            await interaction.followup.send(embed=pages[0], view=view)
+            view = Paginator(pages, author_id=ctx.author.id)
+            await ctx.send(embed=pages[0], view=view)
         else:
-            await interaction.followup.send(embed=pages[0])
+            await ctx.send(embed=pages[0])
 
-    # ------------------------------------------------------------- errors
+    @staticmethod
+    def _error_message(error: Exception) -> str:
+        # Unwrap CommandInvokeError layers to inspect the real exception.
+        original = getattr(error, "original", None)
+        while original is not None:
+            error = original
+            original = getattr(error, "original", None)
+
+        if isinstance(error, (commands.CommandOnCooldown, app_commands.CommandOnCooldown)):
+            return f"Slow down. Try again in **{error.retry_after:.1f} seconds**."
+        if isinstance(error, WikiError):
+            return f"Failed to fetch data from the wiki: {error}"
+        log.error("Unhandled command error: %r", error)
+        return "Something went wrong. Please try again in a moment."
+
+    # ---------------------------------------------------------------- errors
+
+    async def cog_command_error(
+        self, ctx: commands.Context, error: commands.CommandError
+    ) -> None:
+        await ctx.send(self._error_message(error))
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
-        if isinstance(error, app_commands.CommandOnCooldown):
-            message = f"Slow down. Try again in **{error.retry_after:.1f} seconds**."
-        elif isinstance(error, WikiError):
-            message = f"Failed to fetch data from the wiki: {error}"
-        else:
-            log.error("Unhandled command error: %r", error)
-            message = "Something went wrong. Please try again in a moment."
-
+        message = self._error_message(error)
         if interaction.response.is_done():
             await interaction.followup.send(message, ephemeral=True)
         else:
@@ -108,14 +123,14 @@ class WikiCommands(commands.Cog):
 
     # ----------------------------------------------------------- commands
 
-    @app_commands.command(name="wiki", description="Search pages on the Official Fisch Wiki")
+    @commands.hybrid_command(name="wiki", description="Search pages on the Official Fisch Wiki")
     @app_commands.describe(query="Search keywords, e.g. 'salmon' or 'fishing rod'")
-    @app_commands.checks.cooldown(2, 8.0)
-    async def wiki_search(self, interaction: discord.Interaction, query: str) -> None:
-        await interaction.response.defer()
+    @commands.cooldown(2, 8.0, commands.BucketType.user)
+    async def wiki_search(self, ctx: commands.Context, *, query: str) -> None:
+        await ctx.defer()
         results = await self.wiki.search(query, limit=12)
         if not results:
-            await interaction.followup.send(
+            await ctx.send(
                 embed=discord.Embed(
                     title="No results",
                     description=f"No pages match **{query}**.",
@@ -124,22 +139,21 @@ class WikiCommands(commands.Cog):
             )
             return
 
-        pages = _search_pages(query, results)
-        await self._send_pages(interaction, pages)
+        await self._send_pages(ctx, _search_pages(query, results))
 
-    @app_commands.command(name="page", description="Show a summary of a wiki page")
+    @commands.hybrid_command(name="page", description="Show a summary of a wiki page")
     @app_commands.describe(title="Page title, e.g. 'Fisch', 'Codes', or 'Fishing Rods'")
-    @app_commands.checks.cooldown(2, 8.0)
-    async def page(self, interaction: discord.Interaction, title: str) -> None:
-        await interaction.response.defer()
+    @commands.cooldown(2, 8.0, commands.BucketType.user)
+    async def page(self, ctx: commands.Context, *, title: str) -> None:
+        await ctx.defer()
         info = await self.wiki.page(title)
         if info.missing:
-            await interaction.followup.send(
+            await ctx.send(
                 embed=discord.Embed(
                     title="Page not found",
                     description=(
                         f"**{title}** does not exist on the wiki. "
-                        f"Try `/wiki {title}` to search for it."
+                        f"Try `!wiki {title}` to search for it."
                     ),
                     color=discord.Color.orange(),
                 )
@@ -155,22 +169,22 @@ class WikiCommands(commands.Cog):
         if info.thumbnail:
             embed.set_thumbnail(url=info.thumbnail)
         embed.set_footer(text=FOOTER)
-        await interaction.followup.send(embed=embed)
+        await ctx.send(embed=embed)
 
-    @app_commands.command(name="fish", description="Show fish data from the wiki infobox")
+    @commands.hybrid_command(name="fish", description="Show fish data from the wiki infobox")
     @app_commands.describe(name="Fish name, e.g. 'Salmon' or 'Megalodon'")
-    @app_commands.checks.cooldown(2, 8.0)
-    async def fish(self, interaction: discord.Interaction, name: str) -> None:
-        await interaction.response.defer()
+    @commands.cooldown(2, 8.0, commands.BucketType.user)
+    async def fish(self, ctx: commands.Context, *, name: str) -> None:
+        await ctx.defer()
         resolved_title, wikitext = await self.wiki.wikitext(name)
         box = parse_infobox(wikitext, "FishInfobox")
         if box is None:
-            await interaction.followup.send(
+            await ctx.send(
                 embed=discord.Embed(
                     title="Not a fish page",
                     description=(
                         f"**{resolved_title}** has no fish infobox. "
-                        f"Try `/page {resolved_title}` to read its content."
+                        f"Try `!page {resolved_title}` to read its content."
                     ),
                     color=discord.Color.orange(),
                 )
@@ -205,19 +219,21 @@ class WikiCommands(commands.Cog):
         if thumbnail:
             embed.set_thumbnail(url=thumbnail)
         embed.set_footer(text=FOOTER)
-        await interaction.followup.send(embed=embed)
+        await ctx.send(embed=embed)
 
-    @app_commands.command(name="codes", description="Show Fisch redeem codes")
+    @commands.hybrid_command(name="codes", description="Show Fisch redeem codes")
     @app_commands.describe(status="Choose active, inactive, or all codes")
     @app_commands.choices(status=STATUS_CHOICES)
-    @app_commands.checks.cooldown(2, 8.0)
+    @commands.cooldown(2, 8.0, commands.BucketType.user)
     async def codes(
         self,
-        interaction: discord.Interaction,
-        status: app_commands.Choice[str] | None = None,
+        ctx: commands.Context,
+        status: str | None = None,
     ) -> None:
-        await interaction.response.defer()
-        selected = status.value if status else "active"
+        await ctx.defer()
+        selected = (status or "active").lower()
+        if selected not in {"active", "inactive", "all"}:
+            selected = "active"
         _, wikitext = await self.wiki.wikitext("Codes")
         all_codes = parse_codes(wikitext)
 
@@ -225,7 +241,7 @@ class WikiCommands(commands.Cog):
             all_codes = [code for code in all_codes if code["status"] == selected]
 
         if not all_codes:
-            await interaction.followup.send(
+            await ctx.send(
                 embed=discord.Embed(
                     title="No codes",
                     description="No codes found for the selected category.",
@@ -235,5 +251,4 @@ class WikiCommands(commands.Cog):
             return
 
         labels = {"active": "Active", "inactive": "Inactive", "all": "All"}
-        pages = _code_pages(all_codes, labels[selected])
-        await self._send_pages(interaction, pages)
+        await self._send_pages(ctx, _code_pages(all_codes, labels[selected]))

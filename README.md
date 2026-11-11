@@ -8,12 +8,22 @@ and friendly to the wiki servers.
 
 ## Features
 
+All commands work both as prefix commands (`!`) and slash commands (`/`).
+
 | Command | Description |
 | --- | --- |
-| `/wiki <query>` | Search wiki pages (with pagination). |
-| `/page <title>` | Show a page summary plus a link to the source. |
-| `/fish <name>` | Show fish data from `FishInfobox`: rarity, location, weather, season, bait, XP, value, catch chance, and more. |
-| `/codes [status]` | List redeem codes (active / inactive / all) with their rewards. |
+| `!wiki <query>` / `/wiki` | Search wiki pages (with pagination). |
+| `!page <title>` / `/page` | Show a page summary plus a link to the source. |
+| `!fish <name>` / `/fish` | Show fish data from `FishInfobox`: rarity, location, weather, season, bait, XP, value, catch chance, and more. |
+| `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
+
+Examples:
+
+```
+!wiki megalodon
+!fish salmon
+!codes all
+```
 
 Every result includes a link to the original page. API responses are cached for 5 minutes
 so repeated commands do not hammer the wiki.
@@ -27,10 +37,10 @@ so repeated commands do not hammer the wiki.
 
 1. Open <https://discord.com/developers/applications> and click **New Application**.
 2. Go to the **Bot** tab, click **Reset Token**, and copy the token.
-3. You do not need to enable *Message Content Intent* — the bot only uses slash commands.
+3. Still on the **Bot** tab, enable **Message Content Intent** under *Privileged Gateway Intents*. This is required for the `!` prefix commands (slash commands work without it).
 4. Open **OAuth2 → URL Generator**:
    - Scopes: `bot`, `applications.commands`
-   - Bot Permissions: `Send Messages`, `Embed Links`
+   - Bot Permissions: `View Channels`, `Send Messages`, `Embed Links`
 5. Open the generated URL to invite the bot to your server.
 
 ## 2. Installation
