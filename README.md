@@ -90,11 +90,41 @@ immediately there. Global command updates can take a few minutes to reach all se
 
 ## 3. Running
 
+### systemd user service (recommended)
+
+```bash
+bash deploy/install-service.sh
+```
+
+The installer creates `~/.config/systemd/user/fih-bot.service`, enables it now and at
+boot, and restarts the bot automatically if it crashes.
+
+```bash
+systemctl --user status fih-bot
+systemctl --user restart fih-bot
+journalctl --user -u fih-bot -f      # live logs
+```
+
+To remove the service:
+
+```bash
+bash deploy/uninstall-service.sh
+```
+
+### Manual run
+
 ```bash
 python run.py
 ```
 
 On the first run, commands are automatically synced to Discord.
+
+### Logging
+
+- Under systemd, logs go to journald: `journalctl --user -u fih-bot -f`.
+- Set `LOG_FILE=/path/to/bot.log` in `.env` to also write a rotating file
+  (5 MB, 3 backups).
+- Set `LOG_LEVEL=DEBUG` in `.env` for more detail.
 
 ## Test the scraper without Discord
 
@@ -115,6 +145,10 @@ fih-bot/
 ├── run.py                    # entry point
 ├── requirements.txt
 ├── .env.example
+├── deploy/
+│   ├── fih-bot.service.in    # systemd unit template
+│   ├── install-service.sh    # install + enable the user service
+│   └── uninstall-service.sh  # remove the service
 ├── bot/
 │   ├── client.py             # commands.Bot subclass + slash command sync
 │   ├── config.py             # .env loading

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
+from logging.handlers import RotatingFileHandler
 
 import discord
 
@@ -21,11 +23,33 @@ async def run_bot(settings: Settings) -> None:
         await bot.wiki.close()
 
 
-def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+def configure_logging() -> None:
+    """Log to stdout (journald) and optionally to a rotating file."""
+    level_name = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+    level = getattr(logging, level_name, logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
     )
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    root.handlers.clear()
+
+    stream = logging.StreamHandler()
+    stream.setFormatter(formatter)
+    root.addHandler(stream)
+
+    log_file = os.getenv("LOG_FILE", "").strip()
+    if log_file:
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        )
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+
+
+def main() -> int:
+    configure_logging()
 
     settings = Settings.load()
     if not settings.token:
