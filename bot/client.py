@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 import discord
 from discord.ext import commands
 
+from .cogs.general_commands import GeneralCommands
 from .cogs.rod_commands import RodCommands
 from .cogs.wiki_commands import WikiCommands
 from .config import Settings
@@ -25,6 +27,7 @@ class FischBot(commands.Bot):
             help_command=None,
         )
         self.settings = settings
+        self.started_at = datetime.now(timezone.utc)
         self.wiki = WikiClient(
             settings.api_url,
             settings.user_agent,
@@ -51,6 +54,7 @@ class FischBot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.add_cog(WikiCommands(self))
         await self.add_cog(RodCommands(self))
+        await self.add_cog(GeneralCommands(self))
 
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)

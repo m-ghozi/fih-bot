@@ -133,6 +133,28 @@ class WikiClient:
         self._cache_set(key, data)
         return data
 
+    async def ping(self) -> float:
+        """Return the wiki API round-trip time in milliseconds."""
+        payload = {
+            "format": "json",
+            "formatversion": "2",
+            "action": "query",
+            "meta": "siteinfo",
+        }
+        start = time.perf_counter()
+        async with self._semaphore:
+            try:
+                session = await self._get_session()
+                timeout = aiohttp.ClientTimeout(total=self.timeout)
+                async with session.get(
+                    self.api_url, params=payload, timeout=timeout
+                ) as resp:
+                    resp.raise_for_status()
+                    await resp.json(content_type=None)
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+                raise WikiError(f"Could not reach the wiki: {exc}") from exc
+        return (time.perf_counter() - start) * 1000
+
     # --------------------------------------------------------------- helpers
 
     def page_url(self, title: str) -> str:

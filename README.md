@@ -18,6 +18,9 @@ All commands work both as prefix commands (`!`) and slash commands (`/`).
 | `!rod <name>` / `/rod` | Show fishing rod stats (stage, price, lure, luck, control, resilience, max kg, line distance, disturbance) and its ability. |
 | `!enchant <name>` / `/enchant` | Show the wiki's recommended enchantments for a rod (keeperbound, optimal grinding, and other options). |
 | `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
+| `!status` / `/status` | Show bot health, WebSocket and wiki API latency, uptime, and server info. |
+| `!info` / `/info` | Show developer, source code, version, and data-source information. |
+| `!help [command]` / `/help` | List every command, or show usage and parameters for one command. |
 
 Examples:
 
@@ -27,6 +30,9 @@ Examples:
 !rod trident rod
 !enchant no-life rod
 !codes all
+!status
+!info
+!help rod
 ```
 
 `/rod` and `/enchant` also offer slash-command autocomplete for rod names. Partial names work too, e.g. `!rod trident` or `!rod no-life`.
@@ -104,7 +110,8 @@ fih-bot/
 │   ├── ui.py                 # pagination buttons
 │   └── cogs/
 │       ├── wiki_commands.py  # /wiki, /page, /fish, /codes
-│       └── rod_commands.py   # /rod, /enchant
+│       ├── rod_commands.py   # /rod, /enchant
+│       └── general_commands.py # /status, /info, /help
 └── scripts/
     └── check_wiki.py         # scraper check without Discord
 ```
