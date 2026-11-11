@@ -32,6 +32,7 @@ USAGE: dict[str, str] = {
     "codes": "{p}codes [active|inactive|all]",
     "rod": "{p}rod <name>",
     "enchant": "{p}enchant <name>",
+    "mastery": "{p}mastery [rod]",
     "mutations": "{p}mutations [query]",
     "bait": "{p}bait [query]",
     "harpoon": "{p}harpoon [query]",

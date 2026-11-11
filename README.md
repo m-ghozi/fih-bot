@@ -17,6 +17,7 @@ All commands work both as prefix commands (`!`) and slash commands (`/`).
 | `!fish <name>` / `/fish` | Show fish data from `FishInfobox`: rarity, location, weather, season, bait, XP, value, catch chance, and more. |
 | `!rod <name>` / `/rod` | Show fishing rod stats (stage, price, lure, luck, control, resilience, max kg, line distance, disturbance) and its ability. |
 | `!enchant <name>` / `/enchant` | Show the wiki's recommended enchantments for a rod (keeperbound, optimal grinding, and other options). |
+| `!mastery [rod]` / `/mastery` | List rods with Rod Mastery, or show a rod's mastery quests, starting level, and rewards. |
 | `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
 | `!mutations [query]` / `/mutations` | List fish mutations with value multipliers, priority, source, and appraisable chance. |
 | `!bait [query]` / `/bait` | List bait rarity, preferred/universal luck, resilience, lure speed, and abilities. |
@@ -35,6 +36,7 @@ Examples:
 !fish salmon
 !rod trident rod
 !enchant no-life rod
+!mastery trident rod
 !codes all
 !mutations ghost
 !bait worm
@@ -47,7 +49,7 @@ Examples:
 !help rod
 ```
 
-`/rod` and `/enchant` also offer slash-command autocomplete for rod names. Partial names work too, e.g. `!rod trident` or `!rod no-life`.
+`/rod`, `/enchant`, and `/mastery` also offer slash-command autocomplete for rod names. Partial names work too, e.g. `!rod trident`, `!enchant no-life`, or `!mastery trident`.
 
 Every result includes a link to the original page. API responses are cached for 5 minutes
 so repeated commands do not hammer the wiki.
@@ -155,11 +157,12 @@ fih-bot/
 │   ├── wiki.py               # MediaWiki API client + cache + retry
 │   ├── parsing.py            # wikitext parser (infobox, code tables, templates)
 │   ├── catalogs.py           # mutation/bait/harpoon/spear table parser + cache
+│   ├── mastery.py            # rod mastery quest parser + cache
 │   ├── schedule.py           # season cycle + recurring spawn timers
 │   ├── ui.py                 # pagination buttons
 │   └── cogs/
 │       ├── wiki_commands.py  # /wiki, /page, /fish, /codes
-│       ├── rod_commands.py   # /rod, /enchant
+│       ├── rod_commands.py   # /rod, /enchant, /mastery
 │       ├── catalog_commands.py # /mutations, /bait, /harpoon, /spear
 │       ├── schedule_commands.py # /seasons, /spawn
 │       └── general_commands.py # /status, /info, /help
@@ -174,6 +177,7 @@ fih-bot/
 - `/fish` → `action=parse&prop=wikitext`, then the `{{FishInfobox}}` parameters are parsed
 - `/rod` → `action=parse&prop=wikitext` for the `{{RodInfobox}}` stats and the `== Ability ==` section
 - `/enchant` → the `== Enchanting ==` section is parsed from the rod page
+- `/mastery` → the rendered Rod Mastery panels from the rod page, parsed once and cached for an hour
 - `/codes` → `action=parse&prop=wikitext` for the `Codes` page, then the *Active Codes* /
   *Inactive Codes* tables are parsed
 - `/seasons` and `/spawn` → computed locally from the fixed wiki schedules

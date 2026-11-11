@@ -6,12 +6,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from ..mastery import load_mastery, load_mastery_rods
 from ..parsing import (
     extract_section,
     extract_template_version,
     parse_infobox,
 )
-from ..ui import truncate
+from ..ui import Paginator, truncate
 from ..wiki import WikiError
 
 if TYPE_CHECKING:
@@ -147,6 +148,35 @@ class RodCommands(commands.Cog):
             for name in matches[:25]
         ]
 
+    @staticmethod
+    def _mastery_list_pages(
+        wiki_url: Callable[[str], str], members: list[str]
+    ) -> list[discord.Embed]:
+        per_page = 15
+        total_pages = max(1, (len(members) + per_page - 1) // per_page)
+        pages: list[discord.Embed] = []
+        for index in range(total_pages):
+            chunk = members[index * per_page : (index + 1) * per_page]
+            lines = "\n".join(f"[{name}]({wiki_url(name)})" for name in chunk)
+            description = lines
+            if index == 0:
+                description = (
+                    "Rod Mastery adds quests to specific rods. Rewards include "
+                    "skins, boats, bobbers, lanterns, titles, and permanent "
+                    "enhancements. Pick a rod to see its quests.\n\n" + lines
+                )
+            embed = discord.Embed(
+                title="Rod Mastery", description=description, color=COLOR
+            )
+            embed.set_footer(
+                text=(
+                    f"{FOOTER} • {len(members)} rods • "
+                    f"page {index + 1}/{total_pages}"
+                )
+            )
+            pages.append(embed)
+        return pages
+
     # ----------------------------------------------------------- commands
 
     @commands.hybrid_command(
@@ -259,3 +289,116 @@ class RodCommands(commands.Cog):
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
         return await self._rod_autocomplete(interaction, current)
+
+    # ------------------------------------------------------------ mastery
+
+    @commands.hybrid_command(
+        name="mastery",
+        description="Show Rod Mastery quests, rewards, and level requirements",
+    )
+    @app_commands.describe(name="Rod name, e.g. 'Trident Rod'")
+    @commands.cooldown(2, 8.0, commands.BucketType.user)
+    async def mastery(
+        self, ctx: commands.Context, *, name: str | None = None
+    ) -> None:
+        await ctx.defer()
+        members = await load_mastery_rods(self.wiki)
+
+        if name is None:
+            pages = self._mastery_list_pages(self.wiki.page_url, members)
+            if len(pages) > 1:
+                view = Paginator(pages, author_id=ctx.author.id)
+                await ctx.send(embed=pages[0], view=view)
+            else:
+                await ctx.send(embed=pages[0])
+            return
+
+        needle = name.strip().lower()
+        exact = next((member for member in members if member.lower() == needle), None)
+        if exact is not None:
+            title = exact
+        else:
+            matches = [member for member in members if needle in member.lower()]
+            if len(matches) == 1:
+                title = matches[0]
+            elif matches:
+                listing = "\n".join(f"• {member}" for member in matches[:15])
+                await ctx.send(
+                    embed=discord.Embed(
+                        title="Multiple rods match",
+                        description=(
+                            f"**{name}** matches several rods with mastery. "
+                            f"Be more specific:\n\n{listing}"
+                        ),
+                        color=discord.Color.orange(),
+                    )
+                )
+                return
+            else:
+                await ctx.send(
+                    embed=discord.Embed(
+                        title="No Rod Mastery found",
+                        description=(
+                            f"No rod with mastery matches **{name}**. "
+                            "Use `!mastery` to list every rod that has one."
+                        ),
+                        color=discord.Color.orange(),
+                    )
+                )
+                return
+
+        data = await load_mastery(self.wiki, title)
+        if data is None or not data.quests:
+            await ctx.send(
+                embed=discord.Embed(
+                    title="No Rod Mastery",
+                    description=f"The wiki does not list mastery quests for **{title}**.",
+                    color=discord.Color.orange(),
+                )
+            )
+            return
+
+        description_parts: list[str] = []
+        if data.level:
+            description_parts.append(f"Starting level requirement: **{data.level}**")
+        if data.grand_reward:
+            description_parts.append(f"Grand reward: **{data.grand_reward}**")
+        embed = discord.Embed(
+            title=f"Rod Mastery — {data.title}",
+            url=data.url,
+            description="\n".join(description_parts) or None,
+            color=COLOR,
+        )
+        thumbnail = await self.wiki.thumbnail(data.title)
+        if thumbnail:
+            embed.set_thumbnail(url=thumbnail)
+
+        for index, quest in enumerate(data.quests, start=1):
+            value = quest.description or "No description."
+            if quest.reward:
+                value += f"\n**Reward:** {quest.reward}"
+            if quest.note:
+                value += f"\n*{quest.note}*"
+            embed.add_field(
+                name=truncate(f"{index}. {quest.name}", 256),
+                value=truncate(value, 1024),
+                inline=False,
+            )
+
+        embed.set_footer(text=FOOTER)
+        await self._send(ctx, embed)
+
+    @mastery.autocomplete("name")
+    async def mastery_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        try:
+            members = await load_mastery_rods(self.wiki)
+        except WikiError:
+            return []
+        current_lower = current.lower()
+        return [
+            app_commands.Choice(name=member[:100], value=member[:100])
+            for member in members
+            if current_lower in member.lower()
+        ][:25]
