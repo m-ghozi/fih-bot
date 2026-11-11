@@ -34,10 +34,6 @@ Examples:
 Every result includes a link to the original page. API responses are cached for 5 minutes
 so repeated commands do not hammer the wiki.
 
-Output is color-coded: embed side bars follow rarity (fish) or rod stage/menu color,
-stat tables are rendered as ANSI code blocks with colored labels and values, and
-weather/season/status are marked with emoji.
-
 ## Requirements
 
 - Python 3.10+
@@ -105,8 +101,6 @@ fih-bot/
 │   ├── config.py             # .env loading
 │   ├── wiki.py               # MediaWiki API client + cache + retry
 │   ├── parsing.py            # wikitext parser (infobox, code tables, templates)
-│   ├── formatting.py         # ANSI colors, rarity/rod palettes, weather/season emoji
-│   ├── errors.py             # user-friendly command error messages
 │   ├── ui.py                 # pagination buttons
 │   └── cogs/
 │       ├── wiki_commands.py  # /wiki, /page, /fish, /codes

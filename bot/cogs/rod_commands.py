@@ -11,7 +11,6 @@ from ..parsing import (
     extract_template_version,
     parse_infobox,
 )
-from ..formatting import ansi_table, rod_color, sign_color
 from ..ui import truncate
 from ..wiki import WikiError
 
@@ -21,6 +20,7 @@ if TYPE_CHECKING:
 COLOR = discord.Color.from_str("#3ba7d8")
 FOOTER = "Source: Official Fisch Wiki • CC BY-NC-SA 4.0"
 
+# (embed label, RodInfobox parameter, formatter)
 def _format_price(value: str) -> str:
     raw = value.replace(",", "").strip()
     return f"C${int(raw):,}" if raw.isdigit() else value
@@ -32,25 +32,20 @@ def _format_weight(value: str) -> str:
     return f"{value}kg"
 
 
-# (embed label, RodInfobox parameter, formatter)
-ROD_INFO: list[tuple[str, str, Callable[[str], str]]] = [
+ROD_STATS: list[tuple[str, str, Callable[[str], str]]] = [
     ("Stage", "stage", lambda v: f"Stage {v}"),
     ("Source", "source", str),
     ("Price", "price", _format_price),
     ("Journal", "journal", str),
-    ("Tags", "tags", str),
-]
-
-# (ANSI table label, RodInfobox parameter, formatter)
-ROD_STAT_ROWS: list[tuple[str, str, Callable[[str], str]]] = [
+    ("Entry XP", "entryxp", str),
     ("Lure Speed", "lure", lambda v: f"{v}%"),
     ("Luck", "luck", lambda v: f"{v}%"),
     ("Control", "control", str),
     ("Resilience", "resilience", lambda v: f"{v}%"),
     ("Max Kg", "max_weight", _format_weight),
-    ("Line Dist", "line_dist", str),
+    ("Line Distance", "line_dist", str),
     ("Disturbance", "disturbance", lambda v: v if v.startswith("+") else f"+{v}"),
-    ("Entry XP", "entryxp", str),
+    ("Tags", "tags", str),
 ]
 
 # (Enchanting parameter prefix, embed field label)
@@ -173,30 +168,21 @@ class RodCommands(commands.Cog):
 
         info = await self.wiki.page(title)
         embed = discord.Embed(
-            title=f"🎣 {box.get('name') or title}",
+            title=box.get("name") or title,
             url=self.wiki.page_url(title),
             description=truncate(info.extract, 500) if info.extract else None,
-            color=rod_color(box.get("menu_color"), box.get("stage")),
+            color=COLOR,
         )
         if info.thumbnail:
             embed.set_thumbnail(url=info.thumbnail)
 
-        for label, key, formatter in ROD_INFO:
+        for label, key, formatter in ROD_STATS:
             value = box.get(key)
             if not value:
                 continue
             embed.add_field(
                 name=label, value=truncate(formatter(value), 200), inline=True
             )
-
-        stat_rows = []
-        for label, key, formatter in ROD_STAT_ROWS:
-            value = box.get(key)
-            if not value:
-                continue
-            stat_rows.append((label, formatter(value), sign_color(value)))
-        if stat_rows:
-            embed.add_field(name="Stats", value=ansi_table(stat_rows), inline=False)
 
         abilities = _ability_lines(extract_section(wikitext, "Ability"))
         _add_lines_field(embed, "Ability", abilities)
