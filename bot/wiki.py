@@ -207,6 +207,19 @@ class WikiClient:
             raise WikiError(f"Page '{title}' was not found.")
         return parsed.get("title", title), parsed.get("wikitext", "")
 
+    async def category_members(self, category: str, limit: int | str = "max") -> list[str]:
+        data = await self._request(
+            {
+                "action": "query",
+                "list": "categorymembers",
+                "cmtitle": f"Category:{category}",
+                "cmlimit": limit,
+                "cmnamespace": 0,
+            }
+        )
+        members = data.get("query", {}).get("categorymembers", []) or []
+        return [member["title"] for member in members if member.get("title")]
+
     async def thumbnail(self, title: str) -> str | None:
         data = await self._request(
             {

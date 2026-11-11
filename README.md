@@ -15,6 +15,8 @@ All commands work both as prefix commands (`!`) and slash commands (`/`).
 | `!wiki <query>` / `/wiki` | Search wiki pages (with pagination). |
 | `!page <title>` / `/page` | Show a page summary plus a link to the source. |
 | `!fish <name>` / `/fish` | Show fish data from `FishInfobox`: rarity, location, weather, season, bait, XP, value, catch chance, and more. |
+| `!rod <name>` / `/rod` | Show fishing rod stats (stage, price, lure, luck, control, resilience, max kg, line distance, disturbance) and its ability. |
+| `!enchant <name>` / `/enchant` | Show the wiki's recommended enchantments for a rod (keeperbound, optimal grinding, and other options). |
 | `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
 
 Examples:
@@ -22,8 +24,12 @@ Examples:
 ```
 !wiki megalodon
 !fish salmon
+!rod trident rod
+!enchant no-life rod
 !codes all
 ```
+
+`/rod` and `/enchant` also offer slash-command autocomplete for rod names.
 
 Every result includes a link to the original page. API responses are cached for 5 minutes
 so repeated commands do not hammer the wiki.
@@ -97,7 +103,8 @@ fih-bot/
 │   ├── parsing.py            # wikitext parser (infobox, code tables, templates)
 │   ├── ui.py                 # pagination buttons
 │   └── cogs/
-│       └── wiki_commands.py  # /wiki, /page, /fish, /codes
+│       ├── wiki_commands.py  # /wiki, /page, /fish, /codes
+│       └── rod_commands.py   # /rod, /enchant
 └── scripts/
     └── check_wiki.py         # scraper check without Discord
 ```
@@ -107,6 +114,8 @@ fih-bot/
 - `/wiki` → `action=query&list=search`
 - `/page` → `action=query&prop=extracts|pageimages`
 - `/fish` → `action=parse&prop=wikitext`, then the `{{FishInfobox}}` parameters are parsed
+- `/rod` → `action=parse&prop=wikitext` for the `{{RodInfobox}}` stats and the `== Ability ==` section
+- `/enchant` → the `== Enchanting ==` section is parsed from the rod page
 - `/codes` → `action=parse&prop=wikitext` for the `Codes` page, then the *Active Codes* /
   *Inactive Codes* tables are parsed
 

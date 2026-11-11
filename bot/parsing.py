@@ -17,6 +17,8 @@ __all__ = [
     "clean_extract",
     "split_top_level",
     "strip_html",
+    "extract_section",
+    "extract_template_version",
 ]
 
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -236,8 +238,36 @@ def parse_infobox(wikitext: str, template_name: str = "FishInfobox") -> dict[str
     return params
 
 
-_META_SECTIONS = {"change history", "navigation", "references", "external links", "gallery"}
+def extract_section(wikitext: str, heading: str) -> str:
+    """Return the body of a heading section (any level), without the heading."""
+    if not wikitext:
+        return ""
 
+    heading_re = re.compile(
+        r"(?m)^(==+)[ \t]*" + re.escape(heading) + r"[ \t]*\1[ \t]*$"
+    )
+    match = heading_re.search(wikitext)
+    if not match:
+        return ""
+
+    level = len(match.group(1))
+    start = match.end()
+    next_re = re.compile(r"(?m)^(={2,})[ \t]*[^=\n]+?[ \t]*\1[ \t]*$")
+    for next_heading in next_re.finditer(wikitext, start):
+        if len(next_heading.group(1)) <= level:
+            return wikitext[start : next_heading.start()].strip()
+    return wikitext[start:].strip()
+
+
+def extract_template_version(text: str, template_name: str = "Subjective") -> str:
+    """Return the version argument of a template such as ``{{Subjective|1.58.0}}``."""
+    match = re.search(
+        r"\{\{" + re.escape(template_name) + r"\s*\|([^}|]+)", text, re.IGNORECASE
+    )
+    return match.group(1).strip() if match else ""
+
+
+_META_SECTIONS = {"change history", "navigation", "references", "external links", "gallery"}
 
 def clean_extract(text: str) -> str:
     """Tidy text returned by ``prop=extracts`` (drop headings, fix newlines)."""

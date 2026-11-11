@@ -5,6 +5,7 @@ import logging
 import discord
 from discord.ext import commands
 
+from .cogs.rod_commands import RodCommands
 from .cogs.wiki_commands import WikiCommands
 from .config import Settings
 from .wiki import WikiClient
@@ -31,6 +32,7 @@ class FischBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.add_cog(WikiCommands(self))
+        await self.add_cog(RodCommands(self))
 
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)
