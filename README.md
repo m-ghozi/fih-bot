@@ -50,6 +50,7 @@ Examples:
 ```
 
 `/rod`, `/enchant`, and `/mastery` also offer slash-command autocomplete for rod names. Partial names work too, e.g. `!rod trident`, `!enchant no-life`, or `!mastery trident`.
+`/fish` accepts multi-word names and is case-insensitive after lookup, so `!fish whale shark` finds **Whale Shark** even though wiki titles are case-sensitive.
 
 Every result includes a link to the original page. API responses are cached for 5 minutes
 so repeated commands do not hammer the wiki.

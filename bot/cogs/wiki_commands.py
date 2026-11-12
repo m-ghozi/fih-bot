@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from ..parsing import parse_codes, parse_infobox
 from ..ui import Paginator, truncate
+from ..wiki import PageNotFoundError
 
 if TYPE_CHECKING:
     from ..client import FischBot
@@ -86,6 +87,36 @@ class WikiCommands(commands.Cog):
         else:
             await ctx.send(embed=pages[0])
 
+    async def _resolve_fish(self, name: str) -> tuple[str, str] | None:
+        """Find a fish page, tolerating lowercase words and partial names.
+
+        Wiki titles are case-sensitive after the first letter, so ``whale
+        shark`` does not exist while ``Whale Shark`` does. When the exact
+        lookup fails, search the wiki and use the first result that actually
+        has a ``FishInfobox`` (which skips boats, NPCs, and disambiguations).
+        """
+        try:
+            title, text = await self.wiki.wikitext(name)
+        except PageNotFoundError:
+            title, text = "", ""
+        if text and parse_infobox(text, "FishInfobox") is not None:
+            return title, text
+
+        needle = name.strip().lower()
+        results = await self.wiki.search(name, limit=10)
+        # Prefer a case-insensitive title match over the search ranking.
+        results.sort(key=lambda result: result.title.lower() != needle)
+        for result in results:
+            try:
+                candidate_title, candidate_text = await self.wiki.wikitext(
+                    result.title
+                )
+            except PageNotFoundError:
+                continue
+            if parse_infobox(candidate_text, "FishInfobox") is not None:
+                return candidate_title, candidate_text
+        return None
+
     # ----------------------------------------------------------- commands
 
     @commands.hybrid_command(name="wiki", description="Search pages on the Official Fisch Wiki")
@@ -113,6 +144,32 @@ class WikiCommands(commands.Cog):
         await ctx.defer()
         info = await self.wiki.page(title)
         if info.missing:
+            # Wiki titles are case-sensitive after the first letter. Retry
+            # with a case-insensitive exact match, then suggest alternatives.
+            results = await self.wiki.search(title, limit=5)
+            needle = title.strip().lower()
+            exact = next(
+                (result for result in results if result.title.lower() == needle),
+                None,
+            )
+            if exact is not None:
+                info = await self.wiki.page(exact.title)
+            elif results:
+                listing = "\n".join(
+                    f"• [{result.title}]({result.url})"
+                    for result in results
+                )
+                await ctx.send(
+                    embed=discord.Embed(
+                        title="Page not found",
+                        description=(
+                            f"No page named **{title}**. Did you mean:\n\n{listing}"
+                        ),
+                        color=discord.Color.orange(),
+                    )
+                )
+                return
+        if info.missing:
             await ctx.send(
                 embed=discord.Embed(
                     title="Page not found",
@@ -137,11 +194,24 @@ class WikiCommands(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="fish", description="Show fish data from the wiki infobox")
-    @app_commands.describe(name="Fish name, e.g. 'Salmon' or 'Megalodon'")
+    @app_commands.describe(name="Fish name, e.g. 'Salmon', 'Whale Shark', or 'Megalodon'")
     @commands.cooldown(2, 8.0, commands.BucketType.user)
     async def fish(self, ctx: commands.Context, *, name: str) -> None:
         await ctx.defer()
-        resolved_title, wikitext = await self.wiki.wikitext(name)
+        resolved = await self._resolve_fish(name)
+        if resolved is None:
+            await ctx.send(
+                embed=discord.Embed(
+                    title="Fish not found",
+                    description=(
+                        f"No fish page matches **{name}**. "
+                        f"Try `!wiki {name}` to search the wiki."
+                    ),
+                    color=discord.Color.orange(),
+                )
+            )
+            return
+        resolved_title, wikitext = resolved
         box = parse_infobox(wikitext, "FishInfobox")
         if box is None:
             await ctx.send(
