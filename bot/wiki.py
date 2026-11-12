@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -15,7 +16,10 @@ from .parsing import clean_extract, clean_wikitext, strip_html
 
 __all__ = ["WikiClient", "WikiError", "PageNotFoundError", "SearchResult", "PageInfo"]
 
+log = logging.getLogger(__name__)
+
 _CACHE_LIMIT = 512
+_PING_ATTEMPTS = 2
 
 
 class WikiError(Exception):
@@ -134,7 +138,11 @@ class WikiClient:
         return data
 
     async def ping(self) -> float:
-        """Return the wiki API round-trip time in milliseconds."""
+        """Return the wiki API round-trip time in milliseconds.
+
+        The first request after an idle period can hit a stale keep-alive
+        connection, so retry once before reporting the wiki as unreachable.
+        """
         payload = {
             "format": "json",
             "formatversion": "2",
@@ -143,17 +151,28 @@ class WikiClient:
         }
         start = time.perf_counter()
         async with self._semaphore:
-            try:
-                session = await self._get_session()
-                timeout = aiohttp.ClientTimeout(total=self.timeout)
-                async with session.get(
-                    self.api_url, params=payload, timeout=timeout
-                ) as resp:
-                    resp.raise_for_status()
-                    await resp.json(content_type=None)
-            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
-                raise WikiError(f"Could not reach the wiki: {exc}") from exc
-        return (time.perf_counter() - start) * 1000
+            last_error: Exception | None = None
+            for attempt in range(_PING_ATTEMPTS):
+                try:
+                    session = await self._get_session()
+                    timeout = aiohttp.ClientTimeout(total=self.timeout)
+                    async with session.get(
+                        self.api_url, params=payload, timeout=timeout
+                    ) as resp:
+                        resp.raise_for_status()
+                        await resp.json(content_type=None)
+                    return (time.perf_counter() - start) * 1000
+                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+                    last_error = exc
+                    log.warning(
+                        "Wiki API ping attempt %d/%d failed: %s",
+                        attempt + 1,
+                        _PING_ATTEMPTS,
+                        exc,
+                    )
+                    if attempt + 1 < _PING_ATTEMPTS:
+                        await asyncio.sleep(0.6 * (attempt + 1))
+        raise WikiError(f"Could not reach the wiki: {last_error}") from last_error
 
     # --------------------------------------------------------------- helpers
 
