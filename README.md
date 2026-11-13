@@ -17,7 +17,7 @@ All commands work both as prefix commands (`!`) and slash commands (`/`).
 | `!fish <name>` / `/fish` | Show fish data from `FishInfobox`: rarity, location, weather, season, bait, XP, value, catch chance, and more. |
 | `!rod <name>` / `/rod` | Show fishing rod stats (stage, price, lure, luck, control, resilience, max kg, line distance, disturbance) and its ability. |
 | `!enchant <name>` / `/enchant` | Show the wiki's recommended enchantments for a rod (keeperbound, optimal grinding, and other options). |
-| `!relic [name]` / `/relic` | Show an enchantment's effects and the rods it suits best, parsed from the `Enchanting` page. |
+| `!relic [name]` / `/relic` | Show an enchantment's effects and category, parsed from the `Enchanting` page. |
 | `!mastery [rod]` / `/mastery` | List rods with Rod Mastery, or show a rod's mastery quests, starting level, and rewards. |
 | `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
 | `!mutations [query]` / `/mutations` | List fish mutations with value multipliers, priority, source, and appraisable chance. |

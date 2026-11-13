@@ -71,7 +71,6 @@ class Enchantment:
     name: str
     category: str
     effects: tuple[str, ...]
-    optimal: str
     url: str
 
 
@@ -168,6 +167,30 @@ def _category_label(heading: str) -> str:
         if label.endswith(suffix):
             return label[: -len(suffix)]
     return label
+
+
+def _table_columns(table_html: str) -> dict[str, int]:
+    """Map column names (name/effect/tips/...) to their cell index."""
+    header = re.search(r"<tr[^>]*>(.*?)</tr>", table_html, re.S)
+    if header is None:
+        return {}
+    headings = re.findall(r"<th[^>]*>(.*?)</th>", header.group(1), re.S)
+    columns: dict[str, int] = {}
+    for index, heading in enumerate(headings):
+        label = _text(heading).lower()
+        if label.startswith("name"):
+            columns["name"] = index
+        elif label.startswith("effect"):
+            columns["effect"] = index
+        elif label.startswith("tip"):
+            columns["tips"] = index
+        elif label.startswith("type"):
+            columns["type"] = index
+        elif label.startswith("obtainment"):
+            columns["obtainment"] = index
+        elif label.startswith("relic"):
+            columns["relic"] = index
+    return columns
 
 
 def _hidden_text(cell: str) -> str:
@@ -361,33 +384,64 @@ async def load_enchantments(wiki: WikiClient) -> list[Enchantment]:
                 groups.append((label, region[match.end() : chunk_end]))
 
         enchantments: dict[str, Enchantment] = {}
+        scores: dict[str, int] = {}
         for category, chunk in groups:
-            for row in _ROW.finditer(chunk):
-                cells = _CELL.findall(row.group(2))
-                if len(cells) < 2 or 'class="enchantment' not in cells[0]:
+            for table in re.findall(r"<table\b.*?</table>", chunk, re.S):
+                columns = _table_columns(table)
+                if "name" not in columns or "effect" not in columns:
                     continue
-                name = _text(cells[0])
-                if not name:
-                    continue
-                existing = enchantments.get(name)
-                if existing is not None:
-                    if category not in existing.category:
-                        enchantments[name] = Enchantment(
-                            name=existing.name,
-                            category=f"{existing.category} · {category}",
-                            effects=existing.effects,
-                            optimal=existing.optimal,
-                            url=existing.url,
-                        )
-                    continue
-                anchor = quote(name.replace(" ", "_"))
-                enchantments[name] = Enchantment(
-                    name=name,
-                    category=category,
-                    effects=tuple(_lines(cells[1])),
-                    optimal=_text(cells[2]) if len(cells) > 2 else "",
-                    url=f"{wiki.base_url}Enchanting#{anchor}",
-                )
+                for row in _ROW.finditer(table):
+                    cells = _CELL.findall(row.group(2))
+                    if not cells or 'class="enchantment' not in cells[0]:
+                        continue
+
+                    def cell(key: str) -> str:
+                        index = columns.get(key)
+                        if index is None or index >= len(cells):
+                            return ""
+                        return cells[index]
+
+                    name = _text(cell("name"))
+                    if not name:
+                        continue
+                    effects = tuple(_lines(cell("effect")))
+                    # Some enchantments are listed in more than one table
+                    # (e.g. Tropical is both a Sovereign affix and a Limited
+                    # enchantment). Keep the richest row and merge categories.
+                    score = len(effects) + bool(cell("tips")) + bool(
+                        cell("obtainment")
+                    )
+                    existing = enchantments.get(name)
+                    if existing is not None:
+                        categories = existing.category
+                        if category not in categories:
+                            categories = f"{categories} · {category}"
+                        if score > scores.get(name, 0):
+                            anchor = quote(name.replace(" ", "_"))
+                            enchantments[name] = Enchantment(
+                                name=name,
+                                category=categories,
+                                effects=effects,
+                                url=f"{wiki.base_url}Enchanting#{anchor}",
+                            )
+                            scores[name] = score
+                        elif categories != existing.category:
+                            enchantments[name] = Enchantment(
+                                name=existing.name,
+                                category=categories,
+                                effects=existing.effects,
+                                url=existing.url,
+                            )
+                        continue
+
+                    anchor = quote(name.replace(" ", "_"))
+                    enchantments[name] = Enchantment(
+                        name=name,
+                        category=category,
+                        effects=effects,
+                        url=f"{wiki.base_url}Enchanting#{anchor}",
+                    )
+                    scores[name] = score
         return list(enchantments.values())
 
     return await _cached("enchantments", loader)

@@ -252,12 +252,6 @@ class RodCommands(commands.Cog):
             _add_lines_field(
                 embed, "Effect", [f"• {line}" for line in enchantment.effects]
             )
-        if enchantment.optimal:
-            embed.add_field(
-                name="Best used on",
-                value=truncate(enchantment.optimal, 1000),
-                inline=False,
-            )
         embed.set_footer(text=FOOTER)
         return embed
 
@@ -374,7 +368,7 @@ class RodCommands(commands.Cog):
 
     @commands.hybrid_command(
         name="relic",
-        description="Show an enchantment's effects and the rods it suits best",
+        description="Show an enchantment's effects and category",
     )
     @app_commands.describe(name="Enchantment name, e.g. 'Sea King'")
     @commands.cooldown(2, 8.0, commands.BucketType.user)
@@ -402,6 +396,9 @@ class RodCommands(commands.Cog):
             return
 
         needle = name.strip().lower()
+        # Allow "!relic Tropical Relic" as well as "!relic Tropical".
+        if needle.endswith(" relic"):
+            needle = needle[: -len(" relic")].strip()
         exact = next(
             (item for item in enchantments if item.name.lower() == needle), None
         )
