@@ -16,6 +16,7 @@ from ..catalogs import (
     load_baits,
     load_harpoons,
     load_mutations,
+    load_obtainment,
     load_spears,
 )
 from ..ui import Paginator, truncate
@@ -186,7 +187,7 @@ class CatalogCommands(commands.Cog):
 
         match = _resolve(results, query)
         if match is not None:
-            await self._send(ctx, [self._mutation_detail(match)])
+            await self._send(ctx, [await self._mutation_detail(match)])
             return
 
         filters = ""
@@ -218,7 +219,7 @@ class CatalogCommands(commands.Cog):
             f"Source: {truncate(mutation.source, 110)}"
         )
 
-    def _mutation_detail(self, mutation: Mutation) -> discord.Embed:
+    async def _mutation_detail(self, mutation: Mutation) -> discord.Embed:
         embed = discord.Embed(
             title=f"🧬 {mutation.name}",
             url=mutation.url,
@@ -232,6 +233,14 @@ class CatalogCommands(commands.Cog):
             appraisable += f" ({mutation.chance})"
         embed.add_field(name="Appraisable", value=appraisable, inline=True)
         embed.add_field(name="Source", value=truncate(mutation.source, 1000), inline=False)
+
+        obtainment = await load_obtainment(self.bot.wiki, mutation.name)
+        if obtainment:
+            embed.add_field(
+                name="How to obtain",
+                value=truncate(obtainment, 1000),
+                inline=False,
+            )
         if mutation.randomized and mutation.randomized != "—":
             embed.add_field(name="Randomized attribute", value=mutation.randomized, inline=True)
         return self._detail_footer(embed)

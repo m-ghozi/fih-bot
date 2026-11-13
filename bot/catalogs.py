@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 from urllib.parse import urljoin
 
-from .wiki import WikiClient
+from .wiki import WikiClient, WikiError
 
 __all__ = [
     "Mutation",
@@ -23,6 +23,7 @@ __all__ = [
     "Harpoon",
     "Spear",
     "load_mutations",
+    "load_obtainment",
     "load_baits",
     "load_harpoons",
     "load_spears",
@@ -161,6 +162,40 @@ def _table(html: str, table_id: str) -> str | None:
     return html[start:end]
 
 
+def _section_text(page_html: str, heading: str) -> str:
+    """Return the plain text of one ``<h2>`` section, one item per line."""
+    match = re.search(
+        rf'<h2[^>]*\bid="{re.escape(heading)}"[^>]*>.*?</h2>', page_html, re.S
+    )
+    if match is None:
+        return ""
+
+    rest = page_html[match.end() :]
+    next_heading = re.search(r"<h2\b", rest)
+    if next_heading is not None:
+        rest = rest[: next_heading.start()]
+
+    rest = re.sub(r'<span class="mw-editsection">.*?</div>', " ", rest, flags=re.S)
+    rest = _EMBEDDED_CODE.sub(" ", rest)
+    rest = _COMMENT.sub(" ", rest)
+    rest = _HIDDEN_SPAN.sub(" ", rest)
+    rest = _SORTKEY.sub(" ", rest)
+    rest = _BREAK.sub("\n", rest)
+    rest = re.sub(
+        r"</(?:p|li|tr|ul|ol|table|div|h[1-6])>", "\n", rest, flags=re.I
+    )
+    rest = _TAG.sub(" ", rest)
+    rest = html_module.unescape(rest)
+
+    lines = [re.sub(r"[ \t]+", " ", line).strip(" ,") for line in rest.splitlines()]
+    lines = [line for line in lines if line]
+    # Drop the generic lead-in ("<X> fish can be obtained through the following:")
+    # so the field starts with the actual sources.
+    if lines and lines[0].endswith(":"):
+        lines.pop(0)
+    return "\n".join(lines)
+
+
 def _data_rows(table_html: str) -> list[list[str]]:
     rows: list[list[str]] = []
     for row in re.findall(r"<tr[^>]*>(.*?)</tr>", table_html, re.S):
@@ -229,6 +264,19 @@ async def load_mutations(wiki: WikiClient) -> list[Mutation]:
         return mutations
 
     return await _cached("mutations", loader)
+
+
+async def load_obtainment(wiki: WikiClient, name: str) -> str | None:
+    """Return the wiki page's ``Obtainment`` section for a mutation."""
+
+    async def loader() -> str | None:
+        try:
+            _, page = await wiki.parsed_html(name)
+        except WikiError:
+            return None
+        return _section_text(page, "Obtainment") or None
+
+    return await _cached(f"obtainment:{name}", loader)
 
 
 async def load_baits(wiki: WikiClient) -> list[Bait]:
