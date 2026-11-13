@@ -19,7 +19,7 @@ from ..catalogs import (
     load_obtainment,
     load_spears,
 )
-from ..ui import Paginator, truncate
+from ..ui import Paginator, Picker, truncate
 from ..wiki import WikiError
 
 if TYPE_CHECKING:
@@ -122,6 +122,37 @@ class CatalogCommands(commands.Cog):
             await ctx.send(embed=pages[0], view=view)
         else:
             await ctx.send(embed=pages[0])
+
+    async def _send_picker(
+        self,
+        ctx: commands.Context,
+        results: Sequence,
+        detail: Callable[[Any], discord.Embed],
+        *,
+        title: str,
+        placeholder: str,
+    ) -> None:
+        by_name = {item.name: item for item in results}
+
+        async def on_pick(value: str) -> discord.Embed | None:
+            item = by_name.get(value)
+            return detail(item) if item is not None else None
+
+        view = Picker(
+            [(item.name, item.name) for item in results],
+            author_id=ctx.author.id,
+            on_pick=on_pick,
+            placeholder=placeholder,
+        )
+        message = await ctx.send(
+            embed=discord.Embed(
+                title=title,
+                description="Pick the entry you want from the menu below.",
+                color=COLOR,
+            ),
+            view=view,
+        )
+        view.message = message
 
     def _list_pages(
         self,
@@ -280,6 +311,15 @@ class CatalogCommands(commands.Cog):
         if match is not None:
             await self._send(ctx, [self._bait_detail(match)])
             return
+        if query and len(results) > 1:
+            await self._send_picker(
+                ctx,
+                results,
+                self._bait_detail,
+                title=f"🪱 {len(results)} bait match **{truncate(query, 60)}**",
+                placeholder="Choose bait…",
+            )
+            return
 
         pages = self._list_pages(
             "🪱 Bait",
@@ -358,6 +398,15 @@ class CatalogCommands(commands.Cog):
         if match is not None:
             await self._send(ctx, [self._harpoon_detail(match)])
             return
+        if query and len(results) > 1:
+            await self._send_picker(
+                ctx,
+                results,
+                self._harpoon_detail,
+                title=f"🎯 {len(results)} harpoon guns match **{truncate(query, 60)}**",
+                placeholder="Choose a harpoon gun…",
+            )
+            return
 
         pages = self._list_pages(
             "🎯 Harpoon Guns",
@@ -432,6 +481,15 @@ class CatalogCommands(commands.Cog):
         match = _resolve(results, query)
         if match is not None:
             await self._send(ctx, [self._spear_detail(match)])
+            return
+        if query and len(results) > 1:
+            await self._send_picker(
+                ctx,
+                results,
+                self._spear_detail,
+                title=f"🔱 {len(results)} spears match **{truncate(query, 60)}**",
+                placeholder="Choose a spear…",
+            )
             return
 
         pages = self._list_pages(

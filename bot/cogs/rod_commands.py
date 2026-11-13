@@ -6,14 +6,15 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from ..catalogs import Enchantment, load_enchantments
 from ..mastery import load_mastery, load_mastery_rods
 from ..parsing import (
     extract_section,
     extract_template_version,
     parse_infobox,
 )
-from ..ui import Paginator, truncate
-from ..wiki import WikiError
+from ..ui import Paginator, Picker, truncate
+from ..wiki import PageNotFoundError, WikiError
 
 if TYPE_CHECKING:
     from ..client import FischBot
@@ -148,6 +149,68 @@ class RodCommands(commands.Cog):
             for name in matches[:25]
         ]
 
+    async def _find_rods(self, name: str) -> list[str]:
+        needle = name.strip().lower()
+        try:
+            members = await self.wiki.category_members("Fishing Rods")
+        except WikiError:
+            members = []
+
+        exact = next((member for member in members if member.lower() == needle), None)
+        if exact is not None:
+            return [exact]
+
+        matches = [member for member in members if needle in member.lower()]
+        if matches:
+            return matches
+
+        # Fall back to a wiki search for rods outside the category listing.
+        found: list[str] = []
+        for result in await self.wiki.search(name, limit=10):
+            try:
+                title, wikitext = await self.wiki.wikitext(result.title)
+            except PageNotFoundError:
+                continue
+            if (
+                parse_infobox(wikitext, "RodInfobox") is not None
+                and title not in found
+            ):
+                found.append(title)
+        return found
+
+    async def _rod_embed(self, title: str) -> discord.Embed | None:
+        try:
+            resolved_title, wikitext = await self.wiki.wikitext(title)
+        except PageNotFoundError:
+            return None
+        box = parse_infobox(wikitext, "RodInfobox")
+        if box is None:
+            return None
+
+        info = await self.wiki.page(resolved_title)
+        embed = discord.Embed(
+            title=box.get("name") or resolved_title,
+            url=self.wiki.page_url(resolved_title),
+            description=truncate(info.extract, 500) if info.extract else None,
+            color=COLOR,
+        )
+        if info.thumbnail:
+            embed.set_thumbnail(url=info.thumbnail)
+
+        for label, key, formatter in ROD_STATS:
+            value = box.get(key)
+            if not value:
+                continue
+            embed.add_field(
+                name=label, value=truncate(formatter(value), 200), inline=True
+            )
+
+        abilities = _ability_lines(extract_section(wikitext, "Ability"))
+        _add_lines_field(embed, "Ability", abilities)
+
+        embed.set_footer(text=FOOTER)
+        return embed
+
     @staticmethod
     def _mastery_list_pages(
         wiki_url: Callable[[str], str], members: list[str]
@@ -177,6 +240,94 @@ class RodCommands(commands.Cog):
             pages.append(embed)
         return pages
 
+    @staticmethod
+    def _enchantment_embed(enchantment: Enchantment) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"🔮 {enchantment.name}",
+            url=enchantment.url,
+            description=f"**{enchantment.category}** enchantment",
+            color=COLOR,
+        )
+        if enchantment.effects:
+            _add_lines_field(
+                embed, "Effect", [f"• {line}" for line in enchantment.effects]
+            )
+        if enchantment.optimal:
+            embed.add_field(
+                name="Best used on",
+                value=truncate(enchantment.optimal, 1000),
+                inline=False,
+            )
+        embed.set_footer(text=FOOTER)
+        return embed
+
+    @staticmethod
+    def _enchantment_list_pages(
+        enchantments: list[Enchantment],
+    ) -> list[discord.Embed]:
+        per_page = 8
+        chunks = [
+            enchantments[index : index + per_page]
+            for index in range(0, len(enchantments), per_page)
+        ]
+        pages: list[discord.Embed] = []
+        for index, chunk in enumerate(chunks, start=1):
+            lines = []
+            for enchantment in chunk:
+                effect = " · ".join(enchantment.effects[:2]) or "—"
+                lines.append(
+                    f"**[{enchantment.name}]({enchantment.url})** — "
+                    f"{enchantment.category}\n{truncate(effect, 160)}"
+                )
+            embed = discord.Embed(
+                title="🔮 Enchantments",
+                description="\n\n".join(lines),
+                color=COLOR,
+            )
+            embed.set_footer(
+                text=(
+                    f"{FOOTER} • {len(enchantments)} enchantments • "
+                    f"page {index}/{len(chunks)}"
+                )
+            )
+            pages.append(embed)
+        return pages
+
+    async def _mastery_embed(self, title: str) -> discord.Embed | None:
+        data = await load_mastery(self.wiki, title)
+        if data is None or not data.quests:
+            return None
+
+        description_parts: list[str] = []
+        if data.level:
+            description_parts.append(f"Starting level requirement: **{data.level}**")
+        if data.grand_reward:
+            description_parts.append(f"Grand reward: **{data.grand_reward}**")
+        embed = discord.Embed(
+            title=f"Rod Mastery — {data.title}",
+            url=data.url,
+            description="\n".join(description_parts) or None,
+            color=COLOR,
+        )
+        thumbnail = await self.wiki.thumbnail(data.title)
+        if thumbnail:
+            embed.set_thumbnail(url=thumbnail)
+
+        for index, quest in enumerate(data.quests, start=1):
+            value = quest.description or "No description."
+            if quest.reward:
+                value += f"\n**Reward:** {quest.reward}"
+            if quest.note:
+                value += f"\n*{quest.note}*"
+            embed.add_field(
+                name=truncate(f"{index}. {quest.name}", 256),
+                value=truncate(value, 1024),
+                inline=False,
+            )
+
+        embed.set_footer(text=FOOTER)
+        return embed
+
     # ----------------------------------------------------------- commands
 
     @commands.hybrid_command(
@@ -186,45 +337,134 @@ class RodCommands(commands.Cog):
     @commands.cooldown(2, 8.0, commands.BucketType.user)
     async def rod(self, ctx: commands.Context, *, name: str) -> None:
         await ctx.defer()
-        resolved = await self.wiki.resolve_page(name, suffix="Rod")
-        if resolved is None:
+        titles = await self._find_rods(name)
+        if not titles:
             await self._send(ctx, self._not_found_embed(name))
             return
-        title, wikitext = resolved
-        box = parse_infobox(wikitext, "RodInfobox")
-        if box is None:
-            await self._send(ctx, self._not_rod_embed(title, "rod"))
+
+        if len(titles) == 1:
+            embed = await self._rod_embed(titles[0])
+            if embed is None:
+                await self._send(ctx, self._not_rod_embed(titles[0], "rod"))
+                return
+            await self._send(ctx, embed)
             return
 
-        info = await self.wiki.page(title)
-        embed = discord.Embed(
-            title=box.get("name") or title,
-            url=self.wiki.page_url(title),
-            description=truncate(info.extract, 500) if info.extract else None,
-            color=COLOR,
+        view = Picker(
+            [(title, title) for title in titles],
+            author_id=ctx.author.id,
+            on_pick=self._rod_embed,
+            placeholder="Choose a rod…",
         )
-        if info.thumbnail:
-            embed.set_thumbnail(url=info.thumbnail)
-
-        for label, key, formatter in ROD_STATS:
-            value = box.get(key)
-            if not value:
-                continue
-            embed.add_field(
-                name=label, value=truncate(formatter(value), 200), inline=True
-            )
-
-        abilities = _ability_lines(extract_section(wikitext, "Ability"))
-        _add_lines_field(embed, "Ability", abilities)
-
-        embed.set_footer(text=FOOTER)
-        await self._send(ctx, embed)
+        message = await ctx.send(
+            embed=discord.Embed(
+                title=f"🎣 {len(titles)} rods match **{truncate(name, 60)}**",
+                description="Pick the rod you want from the menu below.",
+                color=COLOR,
+            ),
+            view=view,
+        )
+        view.message = message
 
     @rod.autocomplete("name")
     async def rod_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
         return await self._rod_autocomplete(interaction, current)
+
+    @commands.hybrid_command(
+        name="relic",
+        description="Show an enchantment's effects and the rods it suits best",
+    )
+    @app_commands.describe(name="Enchantment name, e.g. 'Sea King'")
+    @commands.cooldown(2, 8.0, commands.BucketType.user)
+    async def relic(self, ctx: commands.Context, *, name: str | None = None) -> None:
+        await ctx.defer()
+        enchantments = await load_enchantments(self.wiki)
+
+        if not enchantments:
+            await ctx.send(
+                embed=discord.Embed(
+                    title="Enchantments unavailable",
+                    description="Could not read the Enchanting page right now.",
+                    color=discord.Color.orange(),
+                )
+            )
+            return
+
+        if name is None:
+            pages = self._enchantment_list_pages(enchantments)
+            if len(pages) > 1:
+                view = Paginator(pages, author_id=ctx.author.id)
+                await ctx.send(embed=pages[0], view=view)
+            else:
+                await ctx.send(embed=pages[0])
+            return
+
+        needle = name.strip().lower()
+        exact = next(
+            (item for item in enchantments if item.name.lower() == needle), None
+        )
+        if exact is not None:
+            await ctx.send(embed=self._enchantment_embed(exact))
+            return
+
+        matches = [
+            item for item in enchantments if needle in item.name.lower()
+        ]
+        if len(matches) == 1:
+            await ctx.send(embed=self._enchantment_embed(matches[0]))
+            return
+        if not matches:
+            await ctx.send(
+                embed=discord.Embed(
+                    title="Enchantment not found",
+                    description=(
+                        f"No enchantment matches **{name}**. "
+                        f"Use `!relic` to list every enchantment."
+                    ),
+                    color=discord.Color.orange(),
+                )
+            )
+            return
+
+        by_name = {item.name: item for item in matches}
+        view = Picker(
+            [(item.name, item.name) for item in matches],
+            author_id=ctx.author.id,
+            on_pick=lambda value: self._pick_enchantment(by_name, value),
+            placeholder="Choose an enchantment…",
+        )
+        message = await ctx.send(
+            embed=discord.Embed(
+                title=f"🔮 {len(matches)} enchantments match **{truncate(name, 60)}**",
+                description="Pick one from the menu below.",
+                color=COLOR,
+            ),
+            view=view,
+        )
+        view.message = message
+
+    async def _pick_enchantment(
+        self, by_name: dict[str, Enchantment], value: str
+    ) -> discord.Embed | None:
+        enchantment = by_name.get(value)
+        return self._enchantment_embed(enchantment) if enchantment else None
+
+    @relic.autocomplete("name")
+    async def relic_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        try:
+            enchantments = await load_enchantments(self.wiki)
+        except WikiError:
+            return []
+        current_lower = current.lower()
+        return [
+            app_commands.Choice(name=item.name[:100], value=item.name[:100])
+            for item in enchantments
+            if current_lower in item.name.lower()
+        ][:25]
 
     @commands.hybrid_command(
         name="enchant",
@@ -322,17 +562,21 @@ class RodCommands(commands.Cog):
             if len(matches) == 1:
                 title = matches[0]
             elif matches:
-                listing = "\n".join(f"• {member}" for member in matches[:15])
-                await ctx.send(
-                    embed=discord.Embed(
-                        title="Multiple rods match",
-                        description=(
-                            f"**{name}** matches several rods with mastery. "
-                            f"Be more specific:\n\n{listing}"
-                        ),
-                        color=discord.Color.orange(),
-                    )
+                view = Picker(
+                    [(member, member) for member in matches],
+                    author_id=ctx.author.id,
+                    on_pick=self._mastery_embed,
+                    placeholder="Choose a rod…",
                 )
+                message = await ctx.send(
+                    embed=discord.Embed(
+                        title=f"🏆 {len(matches)} rods with mastery match **{truncate(name, 60)}**",
+                        description="Pick a rod from the menu below.",
+                        color=COLOR,
+                    ),
+                    view=view,
+                )
+                view.message = message
                 return
             else:
                 await ctx.send(
@@ -347,8 +591,8 @@ class RodCommands(commands.Cog):
                 )
                 return
 
-        data = await load_mastery(self.wiki, title)
-        if data is None or not data.quests:
+        embed = await self._mastery_embed(title)
+        if embed is None:
             await ctx.send(
                 embed=discord.Embed(
                     title="No Rod Mastery",
@@ -357,35 +601,6 @@ class RodCommands(commands.Cog):
                 )
             )
             return
-
-        description_parts: list[str] = []
-        if data.level:
-            description_parts.append(f"Starting level requirement: **{data.level}**")
-        if data.grand_reward:
-            description_parts.append(f"Grand reward: **{data.grand_reward}**")
-        embed = discord.Embed(
-            title=f"Rod Mastery — {data.title}",
-            url=data.url,
-            description="\n".join(description_parts) or None,
-            color=COLOR,
-        )
-        thumbnail = await self.wiki.thumbnail(data.title)
-        if thumbnail:
-            embed.set_thumbnail(url=thumbnail)
-
-        for index, quest in enumerate(data.quests, start=1):
-            value = quest.description or "No description."
-            if quest.reward:
-                value += f"\n**Reward:** {quest.reward}"
-            if quest.note:
-                value += f"\n*{quest.note}*"
-            embed.add_field(
-                name=truncate(f"{index}. {quest.name}", 256),
-                value=truncate(value, 1024),
-                inline=False,
-            )
-
-        embed.set_footer(text=FOOTER)
         await self._send(ctx, embed)
 
     @mastery.autocomplete("name")

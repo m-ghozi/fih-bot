@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ..parsing import parse_codes, parse_infobox
-from ..ui import Paginator, truncate
+from ..ui import Paginator, Picker, truncate
 from ..wiki import PageNotFoundError, WikiError
 
 if TYPE_CHECKING:
@@ -75,117 +75,6 @@ def _code_pages(
 _DISAMBIGUATION_FISH = re.compile(
     r'<span class="item-name[^"]*"[^>]*>\s*<a [^>]*title="([^"]+)"', re.S
 )
-
-MAX_CHOICES = 25
-
-
-class FishSelect(discord.ui.Select):
-    def __init__(self, cog: "WikiCommands", titles: list[str]) -> None:
-        self.cog = cog
-        self.titles = titles
-        self.page = 0
-        super().__init__(placeholder="Choose a fish…", options=self._page_options())
-        self._update_placeholder()
-
-    def _page_options(self) -> list[discord.SelectOption]:
-        start = self.page * MAX_CHOICES
-        chunk = self.titles[start : start + MAX_CHOICES]
-        return [
-            discord.SelectOption(label=truncate(title, 100), value=title)
-            for title in chunk
-        ]
-
-    def _update_placeholder(self) -> None:
-        if len(self.titles) <= MAX_CHOICES:
-            self.placeholder = "Choose a fish…"
-            return
-        start = self.page * MAX_CHOICES
-        end = min(start + MAX_CHOICES, len(self.titles))
-        self.placeholder = (
-            f"Choose a fish… ({start + 1}-{end} of {len(self.titles)})"
-        )
-
-    def show_page(self, page: int) -> None:
-        self.page = page
-        self.options = self._page_options()
-        self._update_placeholder()
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer()
-        embed = await self.cog._fish_embed(self.values[0])
-        if embed is None:
-            await interaction.edit_original_response(
-                content=f"Could not load **{self.values[0]}**.",
-                embed=None,
-                view=None,
-            )
-            return
-        await interaction.edit_original_response(embed=embed, view=None)
-
-
-class FishChooser(discord.ui.View):
-    def __init__(self, cog: "WikiCommands", titles: list[str], author_id: int) -> None:
-        super().__init__(timeout=180)
-        self.author_id = author_id
-        self.titles = titles
-        self.message: discord.Message | None = None
-        self.select = FishSelect(cog, titles)
-        self.add_item(self.select)
-
-        self.previous: discord.ui.Button | None = None
-        self.next: discord.ui.Button | None = None
-        if len(titles) > MAX_CHOICES:
-            self.previous = discord.ui.Button(
-                label="Previous", style=discord.ButtonStyle.secondary
-            )
-            self.previous.callback = self._previous_page
-            self.next = discord.ui.Button(
-                label="Next", style=discord.ButtonStyle.secondary
-            )
-            self.next.callback = self._next_page
-            self.add_item(self.previous)
-            self.add_item(self.next)
-            self._sync_buttons()
-
-    def _sync_buttons(self) -> None:
-        if self.previous is None or self.next is None:
-            return
-        pages = (len(self.titles) + MAX_CHOICES - 1) // MAX_CHOICES
-        self.previous.disabled = self.select.page == 0
-        self.next.disabled = self.select.page >= pages - 1
-
-    async def _change_page(
-        self, interaction: discord.Interaction, delta: int
-    ) -> None:
-        pages = (len(self.titles) + MAX_CHOICES - 1) // MAX_CHOICES
-        page = min(max(self.select.page + delta, 0), pages - 1)
-        self.select.show_page(page)
-        self._sync_buttons()
-        await interaction.response.edit_message(view=self)
-
-    async def _previous_page(self, interaction: discord.Interaction) -> None:
-        await self._change_page(interaction, -1)
-
-    async def _next_page(self, interaction: discord.Interaction) -> None:
-        await self._change_page(interaction, 1)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message(
-                "This menu belongs to someone else. Run the command yourself to pick a fish.",
-                ephemeral=True,
-            )
-            return False
-        return True
-
-    async def on_timeout(self) -> None:
-        for item in self.children:
-            item.disabled = True  # type: ignore[attr-defined]
-        if self.message is not None:
-            try:
-                await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass
 
 
 class WikiCommands(commands.Cog):
@@ -312,6 +201,21 @@ class WikiCommands(commands.Cog):
         embed.set_footer(text=FOOTER)
         return embed
 
+    async def _page_embed(self, title: str) -> discord.Embed | None:
+        info = await self.wiki.page(title)
+        if info.missing:
+            return None
+        embed = discord.Embed(
+            title=info.title,
+            url=info.url,
+            description=truncate(info.extract or "This page has no summary yet.", 3900),
+            color=COLOR,
+        )
+        if info.thumbnail:
+            embed.set_thumbnail(url=info.thumbnail)
+        embed.set_footer(text=FOOTER)
+        return embed
+
     # ----------------------------------------------------------- commands
 
     @commands.hybrid_command(name="wiki", description="Search pages on the Official Fisch Wiki")
@@ -338,33 +242,27 @@ class WikiCommands(commands.Cog):
     async def page(self, ctx: commands.Context, *, title: str) -> None:
         await ctx.defer()
         info = await self.wiki.page(title)
-        if info.missing:
-            # Wiki titles are case-sensitive after the first letter. Retry
-            # with a case-insensitive exact match, then suggest alternatives.
-            results = await self.wiki.search(title, limit=5)
-            needle = title.strip().lower()
-            exact = next(
-                (result for result in results if result.title.lower() == needle),
-                None,
-            )
-            if exact is not None:
-                info = await self.wiki.page(exact.title)
-            elif results:
-                listing = "\n".join(
-                    f"• [{result.title}]({result.url})"
-                    for result in results
-                )
-                await ctx.send(
-                    embed=discord.Embed(
-                        title="Page not found",
-                        description=(
-                            f"No page named **{title}**. Did you mean:\n\n{listing}"
-                        ),
-                        color=discord.Color.orange(),
-                    )
-                )
+        if not info.missing:
+            embed = await self._page_embed(title)
+            if embed is not None:
+                await ctx.send(embed=embed)
                 return
-        if info.missing:
+
+        # Wiki titles are case-sensitive after the first letter. Retry with a
+        # case-insensitive exact match, then offer the search results.
+        results = await self.wiki.search(title, limit=10)
+        needle = title.strip().lower()
+        exact = next(
+            (result for result in results if result.title.lower() == needle),
+            None,
+        )
+        if exact is not None:
+            embed = await self._page_embed(exact.title)
+            if embed is not None:
+                await ctx.send(embed=embed)
+                return
+
+        if not results:
             await ctx.send(
                 embed=discord.Embed(
                     title="Page not found",
@@ -377,16 +275,30 @@ class WikiCommands(commands.Cog):
             )
             return
 
-        embed = discord.Embed(
-            title=info.title,
-            url=info.url,
-            description=truncate(info.extract or "This page has no summary yet.", 3900),
-            color=COLOR,
+        if len(results) == 1:
+            embed = await self._page_embed(results[0].title)
+            if embed is not None:
+                await ctx.send(embed=embed)
+                return
+
+        view = Picker(
+            [(result.title, result.title) for result in results],
+            author_id=ctx.author.id,
+            on_pick=self._page_embed,
+            placeholder="Choose a page…",
         )
-        if info.thumbnail:
-            embed.set_thumbnail(url=info.thumbnail)
-        embed.set_footer(text=FOOTER)
-        await ctx.send(embed=embed)
+        message = await ctx.send(
+            embed=discord.Embed(
+                title="Page not found",
+                description=(
+                    f"No page named **{title}**. Did you mean:"
+                    " pick one from the menu below."
+                ),
+                color=discord.Color.orange(),
+            ),
+            view=view,
+        )
+        view.message = message
 
     @commands.hybrid_command(name="fish", description="Show fish data from the wiki infobox")
     @app_commands.describe(name="Fish name, e.g. 'Salmon', 'Whale Shark', or 'Megalodon'")
@@ -424,17 +336,21 @@ class WikiCommands(commands.Cog):
             await ctx.send(embed=embed)
             return
 
-        view = FishChooser(self, titles, author_id=ctx.author.id)
+        async def build(title: str) -> discord.Embed | None:
+            return await self._fish_embed(title)
+
+        view = Picker(
+            [(title, title) for title in titles],
+            author_id=ctx.author.id,
+            on_pick=build,
+            placeholder="Choose a fish…",
+        )
         message = await ctx.send(
             embed=discord.Embed(
                 title=f"🐟 {len(titles)} fish match **{truncate(name, 60)}**",
                 description=(
                     "Pick the fish you want from the menu below."
-                    + (
-                        " Use **Previous** / **Next** to browse all matches."
-                        if len(titles) > MAX_CHOICES
-                        else ""
-                    )
+                    " Use **Previous** / **Next** to browse all matches."
                 ),
                 color=COLOR,
             ),

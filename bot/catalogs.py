@@ -13,17 +13,19 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 from .wiki import WikiClient, WikiError
 
 __all__ = [
     "Mutation",
+    "Enchantment",
     "Bait",
     "Harpoon",
     "Spear",
     "load_mutations",
     "load_obtainment",
+    "load_enchantments",
     "load_baits",
     "load_harpoons",
     "load_spears",
@@ -40,6 +42,11 @@ _TAG = re.compile(r"<[^>]+>")
 _BREAK = re.compile(r"<br\s*/?>", re.I)
 _EMBEDDED_CODE = re.compile(r"<(style|script)[^>]*>.*?</\1>", re.S | re.I)
 _COMMENT = re.compile(r"<!--.*?-->", re.S)
+_HEADING = re.compile(
+    r'<h([23])[^>]*\bid="([^"]*)"[^>]*>(.*?)</h\1>', re.S
+)
+_ROW = re.compile(r'<tr\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</tr>', re.S)
+_CELL = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
 
 _cache: dict[str, tuple[float, Any]] = {}
 _locks: dict[str, asyncio.Lock] = {}
@@ -56,6 +63,15 @@ class Mutation:
     appraisable: str
     chance: str
     randomized: str
+    url: str
+
+
+@dataclass(frozen=True)
+class Enchantment:
+    name: str
+    category: str
+    effects: tuple[str, ...]
+    optimal: str
     url: str
 
 
@@ -120,6 +136,38 @@ def _text(cell: str) -> str:
     cell = _SORTKEY.sub("", cell)
     cell = _HIDDEN_SPAN.sub("", cell)
     return _strip_tags(cell)
+
+
+def _lines(fragment: str) -> list[str]:
+    """Strip HTML while keeping list items and paragraphs on separate lines."""
+    fragment = _EMBEDDED_CODE.sub(" ", fragment)
+    fragment = _COMMENT.sub(" ", fragment)
+    fragment = _HIDDEN_SPAN.sub(" ", fragment)
+    fragment = _SORTKEY.sub(" ", fragment)
+    fragment = _BREAK.sub("\n", fragment)
+    fragment = re.sub(
+        r"</(?:p|li|tr|ul|ol|div|h[1-6])>", "\n", fragment, flags=re.I
+    )
+    fragment = _TAG.sub(" ", fragment)
+    fragment = html_module.unescape(fragment)
+    lines = [
+        re.sub(r"[ \t]+", " ", line).strip(" ,;")
+        for line in fragment.splitlines()
+    ]
+    return [line for line in lines if line]
+
+
+def _category_label(heading: str) -> str:
+    label = _strip_tags(heading).strip()
+    for suffix in (
+        " Relic Enchants",
+        " Enchantments",
+        " Enchanting",
+        " Enchants",
+    ):
+        if label.endswith(suffix):
+            return label[: -len(suffix)]
+    return label
 
 
 def _hidden_text(cell: str) -> str:
@@ -277,6 +325,72 @@ async def load_obtainment(wiki: WikiClient, name: str) -> str | None:
         return _section_text(page, "Obtainment") or None
 
     return await _cached(f"obtainment:{name}", loader)
+
+
+async def load_enchantments(wiki: WikiClient) -> list[Enchantment]:
+    """Return every enchantment listed on the ``Enchanting`` page."""
+
+    async def loader() -> list[Enchantment]:
+        _, page = await wiki.parsed_html("Enchanting")
+        start = page.find('<h2 id="Enchantments"')
+        if start == -1:
+            return []
+        end = page.find('<h2 id="Badges"', start)
+        region = page[start:end] if end != -1 else page[start:]
+
+        headings = list(_HEADING.finditer(region))
+        groups: list[tuple[str, str]] = []
+        first_h3 = next(
+            (index for index, match in enumerate(headings) if match.group(1) == "3"),
+            None,
+        )
+        if first_h3 is None:
+            groups.append(("Regular", region))
+        else:
+            groups.append(("Regular", region[: headings[first_h3].start()]))
+            for index in range(first_h3, len(headings)):
+                match = headings[index]
+                if match.group(1) != "3":
+                    continue
+                chunk_end = (
+                    headings[index + 1].start()
+                    if index + 1 < len(headings)
+                    else len(region)
+                )
+                label = _category_label(match.group(3)) or "Other"
+                groups.append((label, region[match.end() : chunk_end]))
+
+        enchantments: dict[str, Enchantment] = {}
+        for category, chunk in groups:
+            for row in _ROW.finditer(chunk):
+                cells = _CELL.findall(row.group(2))
+                if len(cells) < 2 or 'class="enchantment' not in cells[0]:
+                    continue
+                name = _text(cells[0])
+                if not name:
+                    continue
+                existing = enchantments.get(name)
+                if existing is not None:
+                    if category not in existing.category:
+                        enchantments[name] = Enchantment(
+                            name=existing.name,
+                            category=f"{existing.category} · {category}",
+                            effects=existing.effects,
+                            optimal=existing.optimal,
+                            url=existing.url,
+                        )
+                    continue
+                anchor = quote(name.replace(" ", "_"))
+                enchantments[name] = Enchantment(
+                    name=name,
+                    category=category,
+                    effects=tuple(_lines(cells[1])),
+                    optimal=_text(cells[2]) if len(cells) > 2 else "",
+                    url=f"{wiki.base_url}Enchanting#{anchor}",
+                )
+        return list(enchantments.values())
+
+    return await _cached("enchantments", loader)
 
 
 async def load_baits(wiki: WikiClient) -> list[Bait]:

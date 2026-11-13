@@ -17,6 +17,7 @@ All commands work both as prefix commands (`!`) and slash commands (`/`).
 | `!fish <name>` / `/fish` | Show fish data from `FishInfobox`: rarity, location, weather, season, bait, XP, value, catch chance, and more. |
 | `!rod <name>` / `/rod` | Show fishing rod stats (stage, price, lure, luck, control, resilience, max kg, line distance, disturbance) and its ability. |
 | `!enchant <name>` / `/enchant` | Show the wiki's recommended enchantments for a rod (keeperbound, optimal grinding, and other options). |
+| `!relic [name]` / `/relic` | Show an enchantment's effects and the rods it suits best, parsed from the `Enchanting` page. |
 | `!mastery [rod]` / `/mastery` | List rods with Rod Mastery, or show a rod's mastery quests, starting level, and rewards. |
 | `!codes [status]` / `/codes` | List redeem codes (active / inactive / all) with their rewards. |
 | `!mutations [query]` / `/mutations` | List fish mutations with value multipliers, priority, source, and appraisable chance. |
@@ -36,6 +37,7 @@ Examples:
 !fish salmon
 !rod trident rod
 !enchant no-life rod
+!relic sea king
 !mastery trident rod
 !codes all
 !mutations ghost
@@ -49,8 +51,12 @@ Examples:
 !help rod
 ```
 
-`/rod`, `/enchant`, and `/mastery` also offer slash-command autocomplete for rod names. Partial names work too, e.g. `!rod trident`, `!enchant no-life`, or `!mastery trident`.
+`/rod`, `/enchant`, `/relic`, and `/mastery` also offer slash-command autocomplete. Partial names work too, e.g. `!rod trident`, `!enchant no-life`, or `!relic sea`.
 `/fish` accepts multi-word names and is case-insensitive after lookup, so `!fish whale shark` finds **Whale Shark** even though wiki titles are case-sensitive.
+
+When a lookup matches several entries (e.g. `!fish shark`, `!rod trident`, `!bait worm`, or
+`!relic santa`), the bot shows a paginated dropdown so you can pick the right one instead of
+silently taking the first search result.
 
 Every result includes a link to the original page. API responses are cached for 5 minutes
 so repeated commands do not hammer the wiki.
@@ -163,7 +169,7 @@ fih-bot/
 │   ├── ui.py                 # pagination buttons
 │   └── cogs/
 │       ├── wiki_commands.py  # /wiki, /page, /fish, /codes
-│       ├── rod_commands.py   # /rod, /enchant, /mastery
+│       ├── rod_commands.py   # /rod, /enchant, /relic, /mastery
 │       ├── catalog_commands.py # /mutations, /bait, /harpoon, /spear
 │       ├── schedule_commands.py # /seasons, /spawn
 │       └── general_commands.py # /status, /info, /help
@@ -178,6 +184,7 @@ fih-bot/
 - `/fish` → `action=parse&prop=wikitext`, then the `{{FishInfobox}}` parameters are parsed
 - `/rod` → `action=parse&prop=wikitext` for the `{{RodInfobox}}` stats and the `== Ability ==` section
 - `/enchant` → the `== Enchanting ==` section is parsed from the rod page
+- `/relic` → the `Enchanting` page's enchantment tables are parsed once and cached for an hour
 - `/mastery` → the rendered Rod Mastery panels from the rod page, parsed once and cached for an hour
 - `/codes` → `action=parse&prop=wikitext` for the `Codes` page, then the *Active Codes* /
   *Inactive Codes* tables are parsed
